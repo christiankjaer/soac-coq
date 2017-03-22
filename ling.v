@@ -2,6 +2,9 @@ Require Import Bool Arith List.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
+(* Adam Chlipalas heterogeneous list implementation (magic inside)
+ * Useful for De Bruijn indices
+ *)
 Section hlist.
   Variable A : Type.
   Variable B : A -> Type.
@@ -55,6 +58,7 @@ Inductive ty : Type :=
 | TNat : ty
 | TList : ty -> ty.
 
+(* Intrinsically typed expression syntax *)
 Inductive exp : list ty -> ty -> Type :=
 | evar : forall G t, member t G -> exp G t
 | etrue : forall G, exp G TBool
@@ -72,6 +76,7 @@ Arguments etrue [G].
 Arguments efalse [G].
 Arguments enil [G].
 
+(* Intrinsically typed values as well *)
 Inductive val : ty -> Type :=
 | vtrue : val TBool
 | vfalse : val TBool
@@ -103,6 +108,7 @@ Fixpoint valDenote t (v : val t) : tyDenote t :=
   | vcons _ v1 v2 => (valDenote v1) :: (valDenote v2)
   end.
 
+(* An interpreter *)
 Fixpoint expDenote G t (e : exp G t) : hlist tyDenote G -> tyDenote t :=
   match e with
   | evar _ _ x => fun s => hget s x
@@ -138,18 +144,21 @@ Qed.
  * replace all occurences of x in f by result of g
  *)
 
-
-
+(* Inductive judgment for append *)
 Inductive CApp : forall t,
     val (TList t) -> val (TList t) -> val (TList t) -> Prop :=
 | CAppNil : forall t (v : val (TList t)), CApp (vnil t) v v
 | CAppCons : forall t v (v1 : val t) v2 v3,
     CApp v2 v3 v -> CApp (vcons v1 v2) v3 (vcons v1 v).
 
+(* The beginning of an inductive judgment for map
+ * This may need to be mutally inductive with Ev
+ *)
 Inductive CMap : forall G t1 t2,
     val (TList t1) -> exp G t2 -> val (TList t2) -> Prop :=
 | CMapNil : forall G t1 t2 (e : exp G t2), CMap (vnil t1) e (vnil t2).
 
+(* The start of an inductive evaluation relation *)
 Inductive Ev : forall t, exp nil t -> val t -> Prop :=
 | EvTrue : Ev etrue vtrue
 | EvFalse : Ev efalse vfalse
@@ -169,6 +178,7 @@ Qed.
 Require Import Coq.Program.Equality.
 Require Import Coq.Program.Tactics.
 
+(* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
     CApp v1 v2 v3 -> CApp v1 v2 v4 -> v3 = v4.
   intros.
@@ -181,6 +191,7 @@ Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
   assumption.
 Qed.
 
+(* Evaluation relation is deterministic *)
 Lemma ev_determ : forall t (e: exp nil t) v1 v2,
     Ev e v1 -> Ev e v2 -> v1 = v2.
   Proof.
