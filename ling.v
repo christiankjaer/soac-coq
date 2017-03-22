@@ -176,7 +176,6 @@ apply EvTrue.
 Qed.
 
 Require Import Coq.Program.Equality.
-Require Import Coq.Program.Tactics.
 
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
