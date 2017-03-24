@@ -1,96 +1,49 @@
 Require Import Bool Arith List.
+Require Import Coq.Program.Equality.
+Load hlist.
+Load syntax.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
-(* Adam Chlipalas heterogeneous list implementation (magic inside)
- * Useful for De Bruijn indices
- *)
-Section hlist.
-  Variable A : Type.
-  Variable B : A -> Type.
-
-  Inductive hlist : list A -> Type :=
-  | HNil : hlist nil
-  | HCons : forall (x : A) (ls : list A), B x -> hlist ls -> hlist (x :: ls).
-
-  Variable elm : A.
-
-  Inductive member : list A -> Type :=
-  | HFirst : forall ls, member (elm :: ls)
-  | HNext : forall x ls, member ls -> member (x :: ls).
-
-  Fixpoint hget ls (mls : hlist ls) : member ls -> B elm :=
-    match mls with
-    | HNil
-      => fun mem =>
-           match mem in member ls'
-                 return (match ls' with
-                         | nil => B elm
-                         | _ :: _ => unit
-                         end) with
-           | HFirst _ => tt
-           | HNext _ _ _ => tt
-           end
-    | HCons _ _ x mls'
-      => fun mem =>
-           match mem in member ls'
-                 return (match ls' with
-                         | nil => Empty_set
-                         | x' :: ls'' =>
-                           B x' -> (member ls'' -> B elm)
-                           -> B elm
-                         end) with
-           | HFirst _ => fun x _ => x
-           | HNext _ _ mem' => fun _ get_mls' => get_mls' mem'
-           end x (hget mls')
-    end.
-  
-End hlist.
-
-Arguments HNil [A B].
-Arguments HCons [A B x ls].
-
-Arguments HFirst [A elm ls].
-Arguments HNext [A elm x ls].
-
-Inductive ty : Type :=
-| TBool : ty
-| TNat : ty
-| TList : ty -> ty.
-
-(* Intrinsically typed expression syntax *)
-Inductive exp : list ty -> ty -> Type :=
-| evar : forall G t, member t G -> exp G t
-| etrue : forall G, exp G TBool
-| efalse : forall G, exp G TBool
-| econst : forall G, nat -> exp G TNat
-| eplus : forall G, exp G TNat -> exp G TNat -> exp G TNat
-| enil : forall G t, exp G (TList t)
-| econs : forall G t, exp G t -> exp G (TList t) -> exp G (TList t)
-| elet : forall G t1 t2, exp G t1 -> exp (t1 :: G) t2 -> exp G t2
-| eappend : forall G t, exp G (TList t) -> exp G (TList t) -> exp G (TList t)
-| emap : forall G t1 t2, exp G (TList t1) -> exp (t1 :: G) t2 -> exp G (TList t2).
-
-Arguments econst [G].
-Arguments etrue [G].
-Arguments efalse [G].
-Arguments enil [G].
-
-(* Intrinsically typed values as well *)
-Inductive val : ty -> Type :=
-| vtrue : val TBool
-| vfalse : val TBool
-| vconst : nat -> val TNat
-| vnil : forall t, val (TList t)
-| vcons : forall t, val t -> val (TList t) -> val (TList t).
-
 Example inc : exp nil (TList TNat) :=
-  emap (econs (econst 4) (enil TNat)) (eplus (evar HFirst) (econst 3)).
+  emap (eplus (evar HFirst) (econst 3)) (econs (econst 4) enil).
 
 Example let_ex : exp nil TNat :=
   elet (econst 42) (eplus (evar HFirst) (econst 10)).
 
-Example app_prog : exp nil (TList TNat) := eappend (econs (econst 0) (enil TNat)) (econs (econst 1) (enil TNat)).
+Example app_prog : exp nil (TList TNat) := eappend (econs (econst 0) enil) (econs (econst 1) enil).
+
+Fixpoint insertAt (t : ty) (G : list ty) (n : nat) {struct n}
+  : list ty :=
+  match n with
+  | O => t :: G
+  | S n' => match G with
+            | nil => t :: G
+            | t' :: G' => t' :: insertAt t G' n'
+            end
+  end.
+
+Fixpoint liftVar t G (x : member t G) t' n
+  : member t (insertAt t' G n) :=
+  match x with
+  | HFirst G' => match n return member t (insertAt t' (t :: G') n) with
+                 | O => HNext HFirst
+                 | _ => HFirst
+                 end
+  | HNext t'' G' x' => match n return member t (insertAt t' (t'' :: G') n) with
+                       | O => HNext (HNext x')
+                       | S n' => HNext (liftVar x' t' n')
+                       end
+  end.
+
+Example nested_map : exp nil (TList TNat) :=
+  emap (eplus (econst 3) (evar HFirst))
+  (emap (eplus (evar HFirst) (econst 10)) [| econst 1 ; econst 2 ; econst 3 |]).
+
+Example flat_map : exp nil (TList TNat) :=
+  emap (eplus (econst 3) (eplus (evar HFirst) (econst 10)))
+       [| econst 1 ; econst 2 ; econst 3 |].
+
 
 Fixpoint tyDenote (t : ty) : Type :=
   match t with
@@ -121,7 +74,7 @@ Fixpoint expDenote G t (e : exp G t) : hlist tyDenote G -> tyDenote t :=
   | elet _ _ _ e el =>
     fun s => expDenote el (HCons (expDenote e s) s)
   | eappend _ _ e1 e2 => fun s => app (expDenote e1 s) (expDenote e2 s)
-  | emap _ _ _ e ef =>
+  | emap _ _ _ ef e =>
     fun s => let f := fun x => expDenote ef (HCons x s)
              in map f (expDenote e s)
   end.
@@ -140,10 +93,40 @@ Proof.
   reflexivity.
 Qed.
 
+Example dummy_proof : expDenote nested_map = expDenote flat_map.
+simpl.
+reflexivity.
+Qed.
+
 (* map f (map g) xs = map (f o g) xs
  * replace all occurences of x in f by result of g
  *)
 
+Check emap.
+Check @HNext.
+
+Fixpoint subst_first G t t1 t2
+         (ef' : exp (t1 :: G) t2)
+         (ef : exp (t2 :: G) t)
+  : exp (t1 :: G) t :=
+  match ef with
+  | evar _ _ (HFirst _) => ef'
+  | evar _ _ x => evar x
+  | econst _ n => econst _ n
+  | etrue _ => etrue _
+  | _ => ef
+  end.
+
+Definition fuse_map G t (e : exp G t) : exp G t :=
+  match e with
+  | emap G' t1' t2' ef' e' =>
+    match e' with
+    | emap G'' t1'' t2'' ef'' e'' => emap G' t1' t2' ef'' e'
+    | _ => e'
+    end
+  | _ => e
+  end.
+      
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
     val (TList t) -> val (TList t) -> val (TList t) -> Prop :=
@@ -163,7 +146,7 @@ Inductive Ev : forall t, exp nil t -> val t -> Prop :=
 | EvTrue : Ev etrue vtrue
 | EvFalse : Ev efalse vfalse
 | EvConst : forall n, Ev (econst n) (vconst n)
-| EvNil : forall t, Ev (enil t) (vnil t)
+| EvNil : forall t, Ev enil (vnil t)
 | EvCons : forall t (e1 : exp nil t) (e2 : exp nil (TList t))
                   (v1 : val t) (v2 : val (TList t)),
     Ev e1 v1 -> Ev e2 v2 -> Ev (econs e1 e2) (vcons v1 v2)
@@ -175,11 +158,10 @@ Example ev_example :
 apply EvTrue.
 Qed.
 
-Require Import Coq.Program.Equality.
-
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
     CApp v1 v2 v3 -> CApp v1 v2 v4 -> v3 = v4.
+Proof.
   intros.
   dependent induction H.
   dependent destruction H0.
@@ -213,3 +195,5 @@ Lemma ev_determ : forall t (e: exp nil t) v1 v2,
     assumption.
     assumption.
 Qed.
+
+  
