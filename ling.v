@@ -13,29 +13,6 @@ Example let_ex : exp nil TNat :=
 
 Example app_prog : exp nil (TList TNat) := eappend (econs (econst 0) enil) (econs (econst 1) enil).
 
-Fixpoint insertAt (t : ty) (G : list ty) (n : nat) {struct n}
-  : list ty :=
-  match n with
-  | O => t :: G
-  | S n' => match G with
-            | nil => t :: G
-            | t' :: G' => t' :: insertAt t G' n'
-            end
-  end.
-
-Fixpoint liftVar t G (x : member t G) t' n
-  : member t (insertAt t' G n) :=
-  match x with
-  | HFirst G' => match n return member t (insertAt t' (t :: G') n) with
-                 | O => HNext HFirst
-                 | _ => HFirst
-                 end
-  | HNext t'' G' x' => match n return member t (insertAt t' (t'' :: G') n) with
-                       | O => HNext (HNext x')
-                       | S n' => HNext (liftVar x' t' n')
-                       end
-  end.
-
 Example nested_map : exp nil (TList TNat) :=
   emap (eplus (econst 3) (evar HFirst))
   (emap (eplus (evar HFirst) (econst 10)) [| econst 1 ; econst 2 ; econst 3 |]).
@@ -83,6 +60,60 @@ Eval compute in (expDenote app_prog) HNil.
 Eval compute in (expDenote let_ex) HNil.
 Eval compute in (expDenote inc) HNil.
 
+Fixpoint insertAt (t : ty) (G : list ty) (n : nat) {struct n}
+  : list ty :=
+  match n with
+  | O => t :: G
+  | S n' => match G with
+            | nil => t :: G
+            | t' :: G' => t' :: insertAt t G' n'
+            end
+  end.
+
+Fixpoint liftVar t G (x : member t G) t' n
+  : member t (insertAt t' G n) :=
+  match x with
+  | HFirst G' => match n return member t (insertAt t' (t :: G') n) with
+                 | O => HNext HFirst
+                 | _ => HFirst
+                 end
+  | HNext t'' G' x' => match n return member t (insertAt t' (t'' :: G') n) with
+                       | O => HNext (HNext x')
+                       | S n' => HNext (liftVar x' t' n')
+                       end
+  end.
+
+Fixpoint lift' G t' n t (e : exp G t) : exp (insertAt t' G n) t :=
+  match e with
+  | evar _ _ x => evar (liftVar x t' n)
+  | etrue _ => etrue
+  | efalse _ => efalse
+  | econst _ n => econst n
+  | eplus _ e1 e2 => eplus (lift' t' n e1) (lift' t' n e2)
+  | enil _ _ => enil
+  | econs _ _ e1 e2 => econs (lift' t' n e1) (lift' t' n e2)
+  | elet _ _ _ e el => elet (lift' t' n e) (lift' t' (S n) el)
+  | eappend _ _ e1 e2 => eappend (lift' t' n e1) (lift' t' n e2)
+  | emap _ _ _ ef e => emap (lift' t' (S n) ef) (lift' t' n e)
+  end.
+
+Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
+  lift' t' O e.
+
+Check @HFirst.
+
+Eval simpl in lift (TBool) (eplus (econst 10) (evar HFirst)).
+
+(* Substitute ef' for all occurences of x in ef *)
+
+Fixpoint subst_first G t t1 t2
+         (ef' : exp (t1 :: G) t2)
+         (ef : exp (t2 :: G) t)
+  : exp (t1 :: G) t.
+  Admitted.
+  
+
+
 Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
     expDenote (eappend (eappend e1 e2) e3) s =
     expDenote (eappend e1 (eappend e2 e3)) s.
@@ -100,22 +131,7 @@ Qed.
 
 (* map f (map g) xs = map (f o g) xs
  * replace all occurences of x in f by result of g
- *)
 
-Check emap.
-Check @HNext.
-
-Fixpoint subst_first G t t1 t2
-         (ef' : exp (t1 :: G) t2)
-         (ef : exp (t2 :: G) t)
-  : exp (t1 :: G) t :=
-  match ef with
-  | evar _ _ (HFirst _) => ef'
-  | evar _ _ x => evar x
-  | econst _ n => econst _ n
-  | etrue _ => etrue _
-  | _ => ef
-  end.
 
 Definition fuse_map G t (e : exp G t) : exp G t :=
   match e with
@@ -126,6 +142,7 @@ Definition fuse_map G t (e : exp G t) : exp G t :=
     end
   | _ => e
   end.
+*)
       
 (* Inductive judgment for append *)
 Inductive CApp : forall t,

@@ -14,7 +14,7 @@ Inductive exp : list ty -> ty -> Type :=
 | econs : forall G t, exp G t -> exp G (TList t) -> exp G (TList t)
 | elet : forall G t1 t2, exp G t1 -> exp (t1 :: G) t2 -> exp G t2
 | eappend : forall G t, exp G (TList t) -> exp G (TList t) -> exp G (TList t)
-| emap : forall G t1 t2, exp (t1 :: G) t2 -> exp G (TList t1) ->exp G (TList t2).
+| emap : forall G t1 t2, exp (t1 :: G) t2 -> exp G (TList t1) -> exp G (TList t2).
 
 Arguments econst [G].
 Arguments etrue [G].
