@@ -102,6 +102,7 @@ Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
 
 Check @HFirst.
 
+
 Eval simpl in lift (TBool) (eplus (econst 10) (evar HFirst)).
 
 (* Substitute ef' for all occurences of x in ef *)
@@ -112,7 +113,7 @@ Fixpoint subst_first G t t1 t2
   : exp (t1 :: G) t.
   Admitted.
   
-
+Check subst_first.
 
 Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
     expDenote (eappend (eappend e1 e2) e3) s =
@@ -131,18 +132,13 @@ Qed.
 
 (* map f (map g) xs = map (f o g) xs
  * replace all occurences of x in f by result of g
+ *)
 
-
-Definition fuse_map G t (e : exp G t) : exp G t :=
+Definition fuse_map G t (e : exp G t): exp G t :=
   match e with
-  | emap G' t1' t2' ef' e' =>
-    match e' with
-    | emap G'' t1'' t2'' ef'' e'' => emap G' t1' t2' ef'' e'
-    | _ => e'
-    end
+  | emap _ _ _ ef eb => emap ef eb
   | _ => e
   end.
-*)
       
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
