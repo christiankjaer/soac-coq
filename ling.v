@@ -168,7 +168,9 @@ Inductive Ev : forall t, exp nil t -> val t -> Prop :=
                   (v1 : val t) (v2 : val (TList t)),
     Ev e1 v1 -> Ev e2 v2 -> Ev (econs e1 e2) (vcons v1 v2)
 | EvAppend : forall t (e1 : exp nil (TList t)) (e2 : exp nil (TList t)) v1 v2 v,
-    Ev e1 v1 -> Ev e2 v2 -> CApp v1 v2 v -> Ev (eappend e1 e2) v.
+    Ev e1 v1 -> Ev e2 v2 -> CApp v1 v2 v -> Ev (eappend e1 e2) v
+| EvPlus : forall (e1 e2 : exp nil TNat) n1 n2,
+    Ev e1 (vconst n1) -> Ev e2 (vconst n2) -> Ev (eplus e1 e2) (vconst (n1 + n2)).
 
 Example ev_example :
   Ev etrue vtrue.
@@ -211,6 +213,8 @@ Lemma ev_determ : forall t (e: exp nil t) v1 v2,
     assumption.
     assumption.
     assumption.
+    dependent destruction H.
+    rewrite 
 Qed.
 
   
