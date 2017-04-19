@@ -300,16 +300,23 @@ Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (lift' t1 (S O) g).
 
+Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
+        v1:
+  expDenote g (HCons (expDenote f (HCons v1 R)) R) =
+  expDenote (compose f g) (HCons v1 R).
+Proof.
+  unfold compose.
+  
 
-(* Program Definition map_fusion t G (e : exp G (TList t)) :=
-  match e in exp _ (TList t) return exp G (TList t) with
-  | emap t2 t g em => match em in exp _ (TList t1) return exp G (TList t) with
+
+Program Definition map_fusion t G (e : exp G t) :=
+  match e in exp _ t return exp G t with
+  | emap t2 t1 g em => match em in exp _ (TList t1) return exp G t with
                        | emap t1 t2 f eb => emap (compose f g) eb
                        | _ => emap g em
                        end
   |  _ => e
   end.
-*)
   
 
 (* Inductive judgment for append *)
@@ -411,7 +418,7 @@ Lemma vconst_congS : forall n n0, vconst n = vconst n0 -> vconst (S n) = vconst 
     congruence.
 Qed.
 (* Evaluation relation is deterministic *)
-Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
+Lemma ev_determ' : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
     Ev R e v1 -> Ev R e v2 -> v1 = v2.
   Proof.
     intros.
@@ -445,5 +452,10 @@ Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
     Admitted.
   (* Need stronger IH with mutual induction *)
 
-  Check exp_ind.
-  
+  Check Ev_mut.
+
+  Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
+    Ev R e v1 -> Ev R e v2 -> v1 = v2.
+  Proof.
+    dependent induction 1.
+    
