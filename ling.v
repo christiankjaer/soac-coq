@@ -198,12 +198,6 @@ Fixpoint valDenote t (v : val t) : tyDenote t :=
   | vcons _ v1 v2 => (valDenote v1) :: (valDenote v2)
   end.
 
-Fixpoint envDenote G : Type :=
-  match G with
-  | nil => unit
-  | t :: G => prodT (tyDenote t) (envDenote G)
-  end.
-
 (* An interpreter *)
 Fixpoint expDenote G t (e : exp G t) : hlist tyDenote G -> tyDenote t :=
   match e with
@@ -304,20 +298,16 @@ Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
         v1:
   expDenote g (HCons (expDenote f (HCons v1 R)) R) =
   expDenote (compose f g) (HCons v1 R).
-Proof.
-  unfold compose.
-  
 
 
-Program Definition map_fusion t G (e : exp G t) :=
-  match e in exp _ t return exp G t with
-  | emap t2 t1 g em => match em in exp _ (TList t1) return exp G t with
-                       | emap t1 t2 f eb => emap (compose f g) eb
-                       | _ => emap g em
-                       end
-  |  _ => e
-  end.
-  
+Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
+  refine (match e in exp _ t return exp G (TList t3) with
+          | emap t2 t3 g em => match em in exp _ (TList t1) return exp G (TList t3) with
+                               | emap t1 t2 f eb => emap (compose f g) eb
+                               | _ => _
+                               end
+          |  _ => _
+          end).
 
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
@@ -454,8 +444,12 @@ Lemma ev_determ' : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
 
   Check Ev_mut.
 
-  Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
-    Ev R e v1 -> Ev R e v2 -> v1 = v2.
+  Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1,
+    Ev R e v1 -> forall v2, Ev R e v2 -> v1 = v2.
   Proof.
-    dependent induction 1.
-    
+    intros.
+    generalize dependent H0.
+    dependent induction H using Ev_mut;
+    intros;
+    try (dependent destruction H0;
+         reflexivity).
