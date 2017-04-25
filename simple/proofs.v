@@ -50,12 +50,10 @@ Qed.
 Lemma filter_fusion : forall (T : Set) (p q : T -> bool)
                              (ls : list T),
     filter p (filter q ls) = filter (fun x => and (p x) (q x)) ls.
-  induction ls. reflexivity. simpl.
-  destruct (q t); simpl.
-  rewrite IHls. rewrite (and_true_r (p t)).
-  reflexivity.
-  rewrite (and_false_r (p t)). rewrite IHls.
-  reflexivity.
+Proof.
+  induction ls.
+  - reflexivity.
+  - simpl. destruct (q t); simpl.
+    * rewrite IHls. rewrite (and_true_r (p t)). reflexivity.
+    * rewrite (and_false_r (p t)). rewrite IHls. reflexivity.
 Qed.
-
-
