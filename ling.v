@@ -61,6 +61,12 @@ Inductive ty : Type :=
 | TNat : ty
 | TList : ty -> ty.
 
+Lemma ty_eq_dec :
+  forall t1 t2 : ty, {t1 = t2} + {t1 <> t2}.
+Proof.
+  decide equality.
+Qed.
+
 Definition env := list ty.
 
 (* Intrinsically typed expression syntax *)
@@ -300,14 +306,27 @@ Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
   expDenote (compose f g) (HCons v1 R).
 
 
-Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
-  refine (match e in exp _ t return exp G (TList t3) with
-          | emap t2 t3 g em => match em in exp _ (TList t1) return exp G (TList t3) with
-                               | emap t1 t2 f eb => emap (compose f g) eb
-                               | _ => _
-                               end
-          |  _ => _
-          end).
+Definition map_fusion (t1 t2 t2' t3: ty): forall G t, exp G t -> exp G t.
+  refine (
+      fun {G}{t} ex =>
+        match ex in exp _ t return t = (TList t3) -> exp G t with
+        | emap t2 t3 f body => fun teq1 => match body in exp _ (TList t2) return t2 = t2' -> exp G (TList t3) with
+                                           | emap t1 t2' g el => fun teq2 => _
+                                           | _ => _
+                                           end _
+        | evar _ x => fun teq1 => evar x
+        | enil _ => fun teq1 => enil
+        | econs _ e1 e2 => fun teq1 => econs e1 e2
+        | efilter _ e1 e2 => fun teq1 => efilter e1 e2
+        | eappend _ e1 e2 => fun teq1 => eappend e1 e2
+        | elet _ _ e1 e2 => fun teq1 => elet e1 e2
+        | _ => _
+        end _
+    );
+    intros;
+    try inversion H.
+  
+
 
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
