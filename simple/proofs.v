@@ -87,9 +87,6 @@ Lemma filter_fusion : forall (T : Set) (p q : T -> bool)
   reflexivity.
 Qed.
 
-Check compose'.
-
 Lemma mapPartial_fusion : forall (T T' T'' : Set) (f : T' -> option T'')
                                  (g : T -> option T') (ls : list T),
     ((mapPartial f) o (mapPartial g)) ls = mapPartial (f oo g) ls.
-  Proof.
