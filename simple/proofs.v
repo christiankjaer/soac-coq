@@ -1,8 +1,7 @@
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
-Definition compose (A B C : Set) (f : B -> C) (g : A -> B) := fun x => f (g x).
-Notation "f 'o' g" := (compose f g) (at level 80, right associativity).
+Notation "f 'o' g" := (fun x => f (g x)) (at level 80, right associativity).
 
 Inductive option (T : Set) : Set :=
 | SOME : T -> option T
@@ -76,15 +75,15 @@ Lemma and_false_r : forall b : bool,
   destruct b; reflexivity.
 Qed.
 
-Lemma filter_fusion : forall (T : Set) (p q : T -> bool)
-                             (ls : list T),
+Theorem filter_fusion : forall (T : Set) (p q : T -> bool)
+                               (ls : list T),
     filter p (filter q ls) = filter (fun x => and (p x) (q x)) ls.
-  induction ls. reflexivity. simpl.
-  destruct (q t); simpl.
-  rewrite IHls. rewrite (and_true_r (p t)).
-  reflexivity.
-  rewrite (and_false_r (p t)). rewrite IHls.
-  reflexivity.
+Proof.
+  induction ls.
+  - reflexivity.
+  - simpl. destruct (q t); simpl.
+    * rewrite IHls. rewrite (and_true_r (p t)). reflexivity.
+    * rewrite (and_false_r (p t)). rewrite IHls. reflexivity.
 Qed.
 
 Lemma mapPartial_fusion : forall (T T' T'' : Set) (f : T' -> option T'')
