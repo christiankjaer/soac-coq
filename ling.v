@@ -311,22 +311,44 @@ Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (lift' t1 (S O) g).
 
+Definition map_fusion t G (e : exp G t) : exp G t.
+  refine (match e in exp _ t' return exp G t' -> exp G t' with
+          | emap t2 t3 g em => (fun lt2 (em' : exp G lt2) =>
+                                  match em' in exp _ lt2 return (TList t2 = lt2 -> _) with
+                                  | emap t3 t2' f eb => fun Heq _ => emap (compose f _) eb
+                                  | _ => fun _ e => e
+                                  end) (TList t2) em eq_refl
+          |  _ => fun e => e
+          end e).
+  injection Heq.
+  intros.
+  subst.
+  assumption.
+  Defined.
+
 Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
         v1:
   expDenote g (HCons (expDenote f (HCons v1 R)) R) =
   expDenote (compose f g) (HCons v1 R).
+  Admitted.
 
 
-(* Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
-  refine (match e in exp _ t return exp G (TList t3) with
-          | emap t2 t3 g em => match em in exp _ (TList t1) return exp G (TList t3) with
-                               | emap t1 t2 f eb => _
-                               | _ => _
-                               end
-          |  _ => _
-          end).
-*)
 
+
+
+Theorem map_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (map_fusion e) HNil.
+  Proof.
+    dependent destruction e; 
+      try (simpl; reflexivity).
+    dependent destruction e2;
+      try (simpl; reflexivity).
+    unfold map_fusion.
+    erewrite <- compose_sound.
+
+    (* STUFF *)
+    Admitted.
+    
+  
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
     val (TList t) -> val (TList t) -> val (TList t) -> Prop :=
