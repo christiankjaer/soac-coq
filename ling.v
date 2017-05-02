@@ -61,6 +61,12 @@ Inductive ty : Type :=
 | TNat : ty
 | TList : ty -> ty.
 
+Lemma ty_eq_dec :
+  forall t1 t2 : ty, {t1 = t2} + {t1 <> t2}.
+Proof.
+  decide equality.
+Qed.
+
 Definition env := list ty.
 
 (* Intrinsically typed expression syntax *)
@@ -101,7 +107,10 @@ Notation "[|| x ; y ; .. ; z ||]" := (vcons x (vcons y .. (vcons z vnil) ..)).
 Notation "[|| x ; .. ; y ||]" := (vcons x .. (vcons y vnil) ..).
 
 Example inc : exp nil (TList TNat) :=
-  emap (esucc (evar HFirst)) (econs (econst 4) enil).
+  emap (esucc (evar HFirst)) (econs (econst 4) (econs (econst 5) enil)).
+
+Check emap (esucc (evar HFirst)) (econs (econst 4) (econs (econst 5) enil)).
+Check (evar (HNext HFirst)).
 
 Example let_ex : exp nil TNat :=
   elet (econst 42) (esucc (evar HFirst)).
@@ -223,6 +232,14 @@ Eval compute in (expDenote app_prog) HNil.
 Eval compute in (expDenote let_ex) HNil.
 Eval compute in (expDenote inc) HNil.
 
+Lemma map_id : forall G t (e : exp G t) s,
+    expDenote (elet e (evar HFirst)) s = expDenote e s.
+Proof.
+  intros. simpl. reflexivity.
+Qed.
+
+
+  
 Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
     expDenote (eappend (eappend e1 e2) e3) s =
     expDenote (eappend e1 (eappend e2 e3)) s.
