@@ -300,7 +300,7 @@ Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
   expDenote (compose f g) (HCons v1 R).
 
 
-Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
+(* Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
   refine (match e in exp _ t return exp G (TList t3) with
           | emap t2 t3 g em => match em in exp _ (TList t1) return exp G (TList t3) with
                                | emap t1 t2 f eb => _
@@ -308,6 +308,7 @@ Definition map_fusion t3 G (e : exp G (TList t3)) : exp G (TList t3).
                                end
           |  _ => _
           end).
+*)
 
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
@@ -369,6 +370,46 @@ Inductive Ev : forall G t, ev_ctx G -> exp G t -> val t -> Prop :=
 Scheme Ev_mut := Induction for Ev Sort Prop
                  with CMap_mut := Induction for CMap Sort Prop
                                   with CFilter_mut := Induction for CFilter Sort Prop.
+
+Lemma semantics_agree : forall G1 G2 t (e : exp nil t) (v : val t) (v' : tyDenote t),
+    expDenote e G1 = v' ->
+    valDenote v = v' ->
+    Ev G2 e v.
+  dependent induction e;
+    intros.
+  dependent destruction m.
+  unfold expDenote in H;
+    dependent destruction v; subst; try constructor; try inversion H0.
+  unfold expDenote in H;
+    dependent destruction v; subst; try constructor; try inversion H0.
+  unfold expDenote in H;
+    dependent destruction v; subst; try constructor; try inversion H0.
+  dependent destruction v.
+  unfold valDenote in H0.
+  subst.
+  simpl.
+  eapply EvSucc.
+  eapply IHe.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  simpl.
+  reflexivity.
+  unfold expDenote in H;
+    dependent destruction v; subst; try constructor; try inversion H0.
+  dependent destruction v;
+  simpl in *;
+  subst. inversion H0.
+  apply EvCons.
+  eapply IHe1; try reflexivity; congruence.
+  eapply IHe2; try reflexivity; congruence.
+  eapply EvLet.
+  eapply IHe1;
+  try reflexivity.
+  simpl in *.
+  subst.
+Abort.
+
 
 Check Ev_mut.
 
