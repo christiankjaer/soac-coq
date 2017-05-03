@@ -76,6 +76,7 @@ Inductive exp G : ty -> Type :=
 | efalse : exp G TBool
 | econst : nat -> exp G TNat
 | esucc : exp G TNat -> exp G TNat
+| eand : exp G TBool -> exp G TBool -> exp G TBool
 | enil : forall t, exp G (TList t)
 | econs : forall t, exp G t -> exp G (TList t) -> exp G (TList t)
 | elet : forall t1 t2, exp G t1 -> exp (t1 :: G) t2 -> exp G t2
@@ -157,6 +158,7 @@ Fixpoint renameExp G G' t (r : Ren G G') (e : exp G t) :=
   | efalse => efalse
   | econst n => econst n
   | esucc e => esucc (renameExp r e)
+  | eand e1 e2 => eand (renameExp r e1) (renameExp r e2)
   | enil _ => enil
   | econs _ e1 e2 => econs (renameExp r e1) (renameExp r e2)
   | elet _ _ e1 e2 => elet (renameExp r e1) (renameExp (renameLift r) e2)
@@ -183,6 +185,7 @@ Fixpoint subExp G G' t (s : Sub G G') (e : exp G t) :=
   | efalse => efalse
   | econst n => econst n
   | esucc e => esucc (subExp s e)
+  | eand e1 e2 => eand (subExp s e1) (subExp s e2)
   | enil _ => enil
   | econs _ e1 e2 => econs (subExp s e1) (subExp s e2)
   | elet _ _ e1 e2 => elet (subExp s e1) (subExp (subShift s) e2)
@@ -215,6 +218,7 @@ Fixpoint expDenote G t (e : exp G t) : hlist tyDenote G -> tyDenote t :=
   | etrue => fun _ => true
   | efalse => fun _ => false
   | esucc e => fun s => S (expDenote e s)
+  | eand e1 e2 => fun s => (expDenote e1 s) && (expDenote e2 s)
   | enil _ => fun _ => nil
   | econs _ e1 e2 => fun s => (expDenote e1 s) :: (expDenote e2 s)
   | elet _ _ e el =>
@@ -297,6 +301,7 @@ Fixpoint lift' G t' n t (e : exp G t) : exp (insertAt t' G n) t :=
   | etrue => etrue
   | efalse => efalse
   | esucc e => esucc (lift' t' n e)
+  | eand e1 e2 => eand (lift' t' n e1) (lift' t' n e2)
   | enil _ => enil
   | econs _ e1 e2 => econs (lift' t' n e1) (lift' t' n e2)
   | elet _ _ e1 e2 => elet (lift' t' n e1) (lift' t' (S n) e2)
@@ -310,6 +315,22 @@ Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
 
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (lift' t1 (S O) g).
+
+Definition filter_fusion t G (e : exp G t) : exp G t.
+  refine (match e in exp _ t' return exp G t' -> exp G t' with
+          | efilter te p em => (fun lt (em' : exp G lt) =>
+                                 match em' in exp _ lt return (TList te = lt -> _) with
+                                 | efilter t' q eb => fun Heq _ => efilter (eand _ _) eb
+                                 | _ => fun _ e => e
+                                 end) (TList te) em eq_refl
+          | _ => fun e => e
+          end e).
+  injection Heq.
+  intros.
+  subst.
+  exact p.
+  exact q.
+Defined.
 
 Definition map_fusion t G (e : exp G t) : exp G t.
   refine (match e in exp _ t' return exp G t' -> exp G t' with
@@ -325,6 +346,10 @@ Definition map_fusion t G (e : exp G t) : exp G t.
   subst.
   assumption.
   Defined.
+
+Extraction map_fusion.
+Extraction compose.
+Extraction subExp.
 
 Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
         v1:
@@ -342,13 +367,18 @@ Theorem map_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (map_f
       try (simpl; reflexivity).
     dependent destruction e2;
       try (simpl; reflexivity).
-    unfold map_fusion.
-    erewrite <- compose_sound.
 
     (* STUFF *)
     Admitted.
+
+Theorem filter_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (filter_fusion e) HNil.
+  Proof.
+    dependent destruction e; 
+      try (simpl; reflexivity).
+    dependent destruction e2;
+      try (simpl; reflexivity).
     
-  
+
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
     val (TList t) -> val (TList t) -> val (TList t) -> Prop :=
