@@ -315,21 +315,29 @@ Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
 
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (lift' t1 (S O) g).
+(*
+Definition filter_fusion' t G (e : exp G t) : exp G t :=
+  match e with
+  | efilter t' p el => match el with
+                       | efilter t' q body => efilter (eand p q) body
+                       | _ => e
+                       end
+  | _ => e
+  end. *)
+
 
 Definition filter_fusion t G (e : exp G t) : exp G t.
-  refine (match e in exp _ t' return exp G t' -> exp G t' with
-          | efilter te p em => (fun lt (em' : exp G lt) =>
-                                 match em' in exp _ lt return (TList te = lt -> _) with
-                                 | efilter t' q eb => fun Heq _ => efilter (eand _ _) eb
-                                 | _ => fun _ e => e
-                                 end) (TList te) em eq_refl
-          | _ => fun e => e
-          end e).
-  injection Heq.
-  intros.
-  subst.
-  exact p.
-  exact q.
+  refine
+    (match e in exp _ t' return exp G t' -> exp G t' with
+     | efilter te p em => (fun lt (em' : exp G lt) =>
+                             match em' in exp _ lt return (TList te = lt -> _) with
+                             | efilter t' q eb => fun Heq _ => efilter (eand _ q) eb
+                             | _ => fun _ e => e
+                             end) (TList te) em _
+     | _ => fun e => e
+     end e).
+  injection Heq. intros. rewrite <- H. exact p.
+  trivial.
 Defined.
 
 Definition map_fusion t G (e : exp G t) : exp G t.
@@ -344,22 +352,17 @@ Definition map_fusion t G (e : exp G t) : exp G t.
   injection Heq.
   intros.
   subst.
-  assumption.
+  exact g.
   Defined.
 
-Extraction map_fusion.
-Extraction compose.
-Extraction subExp.
+Print map_fusion.
 
 Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
         v1:
   expDenote g (HCons (expDenote f (HCons v1 R)) R) =
   expDenote (compose f g) (HCons v1 R).
+  unfold compose.
   Admitted.
-
-
-
-
 
 Theorem map_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (map_fusion e) HNil.
   Proof.
@@ -377,7 +380,22 @@ Theorem filter_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (fi
       try (simpl; reflexivity).
     dependent destruction e2;
       try (simpl; reflexivity).
-    
+    simpl.
+    induction (expDenote e2_2 HNil).
+    simpl.
+    reflexivity.
+    simpl.
+    destruct (expDenote e2_1 (HCons a HNil)).
+    simpl.
+    destruct (expDenote e1 (HCons a HNil)).
+    simpl.
+    rewrite <- IHt.
+    reflexivity.
+    simpl.
+    rewrite <- IHt.
+    reflexivity.
+    erewrite -> andb_b_false.
+
 
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
