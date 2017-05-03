@@ -241,8 +241,6 @@ Lemma map_id : forall G t (e : exp G t) s,
 Proof.
   intros. simpl. reflexivity.
 Qed.
-
-
   
 Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
     expDenote (eappend (eappend e1 e2) e3) s =
@@ -253,15 +251,6 @@ Proof.
   rewrite <- app_assoc.
   reflexivity.
 Qed.
-
-Example dummy_proof : expDenote nested_map = expDenote flat_map.
-simpl.
-reflexivity.
-Qed.
-
-(* map f (map g) xs = map (f o g) xs
- * replace all occurences of x in f by result of g
- *)
 
 Definition tlSub {G G' t} (s : Sub (t :: G) G') : Sub G G' :=
   fun t' v => s t' (HNext v).
@@ -346,56 +335,57 @@ Definition map_fusion t G (e : exp G t) : exp G t.
                                   match em' in exp _ lt2 return (TList t2 = lt2 -> _) with
                                   | emap t3 t2' f eb => fun Heq _ => emap (compose f _) eb
                                   | _ => fun _ e => e
-                                  end) (TList t2) em eq_refl
+                                  end) (TList t2) em _
           |  _ => fun e => e
           end e).
-  injection Heq.
-  intros.
-  subst.
-  exact g.
-  Defined.
+  injection Heq. intros. subst. exact g.
+  trivial.
+Defined.
 
-Print map_fusion.
-
-Theorem compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
-        v1:
+Lemma compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
+      v1:
   expDenote g (HCons (expDenote f (HCons v1 R)) R) =
   expDenote (compose f g) (HCons v1 R).
   unfold compose.
-  Admitted.
+Admitted.
 
 Theorem map_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (map_fusion e) HNil.
   Proof.
+    (* Eliminate all the trivial cases *)
     dependent destruction e; 
       try (simpl; reflexivity).
     dependent destruction e2;
       try (simpl; reflexivity).
-
-    (* STUFF *)
-    Admitted.
+    simpl.
+    (* Now do induction over what the list evaluates to *)
+    induction (expDenote e2_2 HNil).
+    - reflexivity.
+    - simpl.
+      rewrite compose_sound.
+      rewrite IHt.
+      reflexivity.
+  Qed.
 
 Theorem filter_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (filter_fusion e) HNil.
   Proof.
+    (* Eliminate all the trivial cases *)
     dependent destruction e; 
       try (simpl; reflexivity).
     dependent destruction e2;
       try (simpl; reflexivity).
     simpl.
+    (* Now do induction over what the list evaluates to *)
     induction (expDenote e2_2 HNil).
-    simpl.
-    reflexivity.
-    simpl.
-    destruct (expDenote e2_1 (HCons a HNil)).
-    simpl.
-    destruct (expDenote e1 (HCons a HNil)).
-    simpl.
-    rewrite <- IHt.
-    reflexivity.
-    simpl.
-    rewrite <- IHt.
-    reflexivity.
-    erewrite -> andb_b_false.
-
+    - reflexivity.
+    - simpl.
+      destruct (expDenote e2_1 (HCons a HNil)); simpl.
+      destruct (expDenote e1 (HCons a HNil)); simpl;
+        try rewrite <- IHt;
+        reflexivity.
+      rewrite -> andb_b_false.
+      rewrite <- IHt.
+      reflexivity.
+Qed.
 
 (* Inductive judgment for append *)
 Inductive CApp : forall t,
