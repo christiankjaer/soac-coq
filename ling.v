@@ -394,6 +394,17 @@ Inductive CApp : forall t,
 | CAppCons : forall t v (v1 : val t) v2 v3,
     CApp v2 v3 v -> CApp (vcons v1 v2) v3 (vcons v1 v).
 
+
+(* CApp is deterministic *)
+Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
+    CApp v1 v2 v3 /\ CApp v1 v2 v4 -> v3 = v4.
+Proof.
+  intros t v1 v2 v3 v4 [H H'].
+  dependent induction H; dependent destruction H'.
+  - reflexivity.
+  - rewrite (IHCApp v0). reflexivity. assumption.
+Qed.
+
 Inductive Ev : forall G t, ev_ctx G -> exp G t -> val t -> Prop :=
 | EvVar : forall G R t (m : member t G),
     Ev R (evar m) (hget R m)
@@ -422,6 +433,11 @@ Inductive Ev : forall G t, ev_ctx G -> exp G t -> val t -> Prop :=
                  Ev R e2 v ->
                  CMap R v e1 v' ->
                  Ev R (emap e1 e2) v'
+| EvFilter : forall (G : ty_ctx) (R : ev_ctx G) t
+                 (e1 : exp (t :: G) TBool) (e2 : exp G (TList t)) v v',
+                 Ev R e2 v ->
+                 CFilter R v e1 v' ->
+                 Ev R (efilter e1 e2) v'
  with CMap : forall G t1 t2,
     ev_ctx G -> val (TList t1) -> exp (t1 :: G) t2 -> val (TList t2) -> Prop :=
       | CMapNil : forall (G : ty_ctx) (R : ev_ctx G) t1 t2 (e : exp (t1 :: G) t2),
@@ -448,7 +464,7 @@ Scheme Ev_mut := Induction for Ev Sort Prop
                  with CMap_mut := Induction for CMap Sort Prop
                                   with CFilter_mut := Induction for CFilter Sort Prop.
 
-Lemma semantics_agree : forall G1 G2 t (e : exp nil t) (v : val t) (v' : tyDenote t),
+(* Lemma semantics_agree : forall G1 G2 t (e : exp nil t) (v : val t) (v' : tyDenote t),
     expDenote e G1 = v' ->
     valDenote v = v' ->
     Ev G2 e v.
@@ -486,6 +502,7 @@ Lemma semantics_agree : forall G1 G2 t (e : exp nil t) (v : val t) (v' : tyDenot
   simpl in *.
   subst.
 Abort.
+*)
 
 
 Check Ev_mut.
@@ -506,25 +523,24 @@ Example ev_map :
 repeat econstructor.
 Qed.
 
-(* CApp is deterministic *)
-Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
-    CApp v1 v2 v3 -> CApp v1 v2 v4 -> v3 = v4.
+Lemma vconst_congS : forall n n0, vconst n = vconst n0 -> vconst (S n) = vconst (S n0).
 Proof.
   intros.
-  dependent induction H.
-  dependent destruction H0.
-  reflexivity.
-  dependent destruction H0.
-  rewrite (IHCApp v0).
-  reflexivity.
-  assumption.
+  congruence.
 Qed.
 
-Lemma vconst_congS : forall n n0, vconst n = vconst n0 -> vconst (S n) = vconst (S n0).
-  Proof.
-    intros.
-    congruence.
-Qed.
+Tactic Notation "dependent" "induction" ident(H) "using" constr(c) "with" constr(b) :=
+  do_depind ltac:(fun hyp => induction hyp using c with b) H.
+
+Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1,
+    Ev R e v1 -> forall v2, Ev R e v2 -> v1 = v2.
+Proof.
+  intros.
+  generalize dependent H0.
+  generalize dependent v2.
+  dependent induction H using Ev_mut with (P:=asdf,).
+
+
 (* Evaluation relation is deterministic *)
 Lemma ev_determ' : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
     Ev R e v1 -> Ev R e v2 -> v1 = v2.
@@ -561,13 +577,3 @@ Lemma ev_determ' : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
   (* Need stronger IH with mutual induction *)
 
   Check Ev_mut.
-
-  Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1,
-    Ev R e v1 -> forall v2, Ev R e v2 -> v1 = v2.
-  Proof.
-    intros.
-    generalize dependent H0.
-    dependent induction H using Ev_mut;
-    intros;
-    try (dependent destruction H0;
-         reflexivity).
