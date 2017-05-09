@@ -464,47 +464,6 @@ Scheme Ev_mut := Induction for Ev Sort Prop
                  with CMap_mut := Induction for CMap Sort Prop
                                   with CFilter_mut := Induction for CFilter Sort Prop.
 
-(* Lemma semantics_agree : forall G1 G2 t (e : exp nil t) (v : val t) (v' : tyDenote t),
-    expDenote e G1 = v' ->
-    valDenote v = v' ->
-    Ev G2 e v.
-  dependent induction e;
-    intros.
-  dependent destruction m.
-  unfold expDenote in H;
-    dependent destruction v; subst; try constructor; try inversion H0.
-  unfold expDenote in H;
-    dependent destruction v; subst; try constructor; try inversion H0.
-  unfold expDenote in H;
-    dependent destruction v; subst; try constructor; try inversion H0.
-  dependent destruction v.
-  unfold valDenote in H0.
-  subst.
-  simpl.
-  eapply EvSucc.
-  eapply IHe.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  simpl.
-  reflexivity.
-  unfold expDenote in H;
-    dependent destruction v; subst; try constructor; try inversion H0.
-  dependent destruction v;
-  simpl in *;
-  subst. inversion H0.
-  apply EvCons.
-  eapply IHe1; try reflexivity; congruence.
-  eapply IHe2; try reflexivity; congruence.
-  eapply EvLet.
-  eapply IHe1;
-  try reflexivity.
-  simpl in *.
-  subst.
-Abort.
-*)
-
-
 Check Ev_mut.
 
 Example ev_example :
@@ -529,51 +488,64 @@ Proof.
   congruence.
 Qed.
 
-Tactic Notation "dependent" "induction" ident(H) "using" constr(c) "with" constr(b) :=
-  do_depind ltac:(fun hyp => induction hyp using c with b) H.
+Ltac ev_destructor :=
+  match goal with
+  | [ H : Ev _ _ ?v |- _ = ?v ] => dependent destruction H; try reflexivity
+  end.
 
-Lemma ev_determ : forall G (R : ev_ctx G) t (e: exp G t) v1,
-    Ev R e v1 -> forall v2, Ev R e v2 -> v1 = v2.
+Lemma map_determ : forall G t1 t2 (R : ev_ctx G) (e : exp (t1 :: G) t2)
+                          (v1 : val (TList t1)) (v2 : val (TList t2)) (v2' : val (TList t2)),
+    CMap R v1 e v2 -> CMap R v1 e v2' -> v2 = v2'.
+  Admitted.
+
+Lemma filter_determ : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool)
+                          (v1 : val (TList t)) (v2 : val (TList t)) (v2' : val (TList t)),
+    CFilter R v1 e v2 -> CFilter R v1 e v2' -> v2 = v2'.
+  Admitted.
+
+Check Ev_mut.
+
+Lemma ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
+    Ev R e v1 -> Ev R e v2 -> v1 = v2.
 Proof.
   intros.
   generalize dependent H0.
   generalize dependent v2.
-  dependent induction H using Ev_mut with (P:=asdf,).
+  induction H;
+  intros;
+  ev_destructor.
+  rewrite (IHEv1 v3).
+  rewrite (IHEv2 v4).
+  reflexivity.
+  assumption.
+  assumption.
+  eapply capp_determ.
+  split.
+  eassumption.
+  rewrite (IHEv1 v3).
+  rewrite (IHEv2 v4).
+  assumption.
+  assumption.
+  assumption.
+  apply IHEv in H0.
+  apply vconst_congS.
+  assumption.
+  apply (IHEv2 v3).
+  rewrite (IHEv1 v0).
+  assumption.
+  assumption.
+  rewrite (IHEv v0) in H0.
+  eapply map_determ.
+  eassumption.
+  assumption.
+  assumption.
+  rewrite (IHEv v0) in H0.
+  eapply filter_determ.
+  eassumption.
+  assumption.
+  assumption.
+Qed.
 
 
-(* Evaluation relation is deterministic *)
-Lemma ev_determ' : forall G (R : ev_ctx G) t (e: exp G t) v1 v2,
-    Ev R e v1 -> Ev R e v2 -> v1 = v2.
-  Proof.
-    intros.
-    dependent induction H;
-    try (dependent destruction H0;
-         reflexivity).
-    dependent destruction H1.
-    rewrite (IHEv1 v3).
-    rewrite (IHEv2 v4).
-    reflexivity.
-    assumption.
-    assumption.
-    dependent destruction H2.
-    eapply capp_determ.
-    eassumption.
-    rewrite (IHEv1 v3).
-    rewrite (IHEv2 v4).
-    assumption.
-    assumption.
-    assumption.
-    dependent destruction H0.
-    apply IHEv in H0.
-    apply vconst_congS.
-    assumption.
-    dependent destruction H1.
-    rewrite (IHEv2 v3).
-    reflexivity.
-    rewrite (IHEv1 v2).
-    assumption.
-    assumption.
-    Admitted.
-  (* Need stronger IH with mutual induction *)
+  
 
-  Check Ev_mut.
