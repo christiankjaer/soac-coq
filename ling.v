@@ -303,6 +303,8 @@ Check lift'.
 
 Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
   lift' t' O e.
+Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
+  subExp {| f |} (lift' t1 (S O) g).
 
 Check lift.
 
@@ -333,8 +335,7 @@ Fixpoint subst G t (n : nat) (f : exp G t) (e : exp G t) : exp G t.
           end e).
 *)
 
-Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
-  subExp {| f |} (lift' t1 (S O) g).
+
 (*
 Definition filter_fusion' t G (e : exp G t) : exp G t :=
   match e with
@@ -380,26 +381,83 @@ Lemma compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
   expDenote g (HCons (expDenote f (HCons v1 R)) R) =
   expDenote (compose f g) (HCons v1 R).
   unfold compose.
+
+Lemma shift_lift : forall G t0 t1 t3 f (g : exp (t0 :: t1 :: G) t3), subExp (subShift {| f |}) (lift' t1 2 g) = g.
 Admitted.
 
-Theorem map_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (map_fusion e) HNil.
-  Proof.
-    (* Eliminate all the trivial cases *)
-    dependent destruction e; 
-      try (simpl; reflexivity).
-    dependent destruction e2;
-      try (simpl; reflexivity).
-    simpl.
-    (* Now do induction over what the list evaluates to *)
-    induction (expDenote e2_2 HNil).
-    - reflexivity.
-    - simpl.
-      rewrite compose_sound.
-      rewrite IHt.
-      reflexivity.
-  Qed.
+Lemma compose_sound : forall t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) v1,
+    expDenote g (HCons (expDenote f (HCons v1 R)) R) =
+    expDenote (compose f g) (HCons v1 R).
+Proof.
+  unfold compose.
+  intros.
+  generalize dependent f.
+  generalize dependent v1.
+  dependent induction g; intros; try reflexivity.
+  dependent destruction m.
+  reflexivity.
+  unfold subExp.
+  simpl.
+  destruct G.
+  inversion m.
+  dependent destruction m.
+  simpl.
+  reflexivity.
+  simpl.
+  reflexivity.
+  simpl.
+  rewrite IHg.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  simpl.
+  rewrite IHg1.
+  rewrite IHg2.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  simpl.
+  rewrite IHg1.
+  rewrite IHg2.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  simpl.
+  rewrite IHg1.
+Admitted. 
 
-Theorem filter_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (filter_fusion e) HNil.
+
+
+  
+(*
+ expDenote g2 (HCons (expDenote g1 (HCons (expDenote f (HCons v1 R)) R)) (HCons (expDenote f (HCons v1 R)) R)) =
+  expDenote (subExp (subShift {|f|}) (lift' t1 2 g2))
+    (HCons (expDenote g1 (HCons (expDenote f (HCons v1 R)) R)) (HCons v1 R))
+*)
+  
+  
+Theorem map_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (map_fusion e) s.
+Proof.
+  (* Eliminate all the trivial cases *)
+  dependent destruction e; 
+    try (simpl; reflexivity).
+  dependent destruction e2;
+    try (simpl; reflexivity).
+  simpl.
+  (* Now do induction over what the list evaluates to *)
+  induction (expDenote e2_2 s).
+  - reflexivity.
+  - simpl.
+    rewrite compose_sound.
+    rewrite IHt.
+    reflexivity.
+Qed.
+
+Theorem filter_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (filter_fusion e) s.
   Proof.
     (* Eliminate all the trivial cases *)
     dependent destruction e; 
@@ -408,11 +466,11 @@ Theorem filter_fusion_sound t (e : exp nil t) : expDenote e HNil = expDenote (fi
       try (simpl; reflexivity).
     simpl.
     (* Now do induction over what the list evaluates to *)
-    induction (expDenote e2_2 HNil).
+    induction (expDenote e2_2 s).
     - reflexivity.
     - simpl.
-      destruct (expDenote e2_1 (HCons a HNil)); simpl.
-      destruct (expDenote e1 (HCons a HNil)); simpl;
+      destruct (expDenote e2_1 (HCons a s)); simpl.
+      destruct (expDenote e1 (HCons a s)); simpl;
         try rewrite <- IHt;
         reflexivity.
       rewrite -> andb_b_false.
