@@ -299,8 +299,39 @@ Fixpoint lift' G t' n t (e : exp G t) : exp (insertAt t' G n) t :=
   | efilter _ e1 e2 => efilter (lift' t' (S n) e1) (lift' t' n e2)
   end.
 
+Check lift'.
+
 Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
   lift' t' O e.
+
+Check lift.
+
+(* Fixpoint substVar G t (f : exp G t) n : member t G -> exp G t :=
+  fun m =>
+    match m with
+    | HFirst G' => match n with
+                   | O => f
+                   | _ => HFirst
+                   end
+    | HNext t' G' x' => match n with
+                        | O => HNext t' G' x'
+                        | S n' => substVar f n'
+                        end
+    end.
+(* subst f for index n in e *)
+Fixpoint subst G t (n : nat) (f : exp G t) (e : exp G t) : exp G t.
+  refine (match e in exp _ t' return exp G t' -> exp G t' with
+          (*| esucc e => fun _ => esucc (subst G t n f e)
+          | eand e1 e2 => eand (subst n f e1) (subst n f e2)
+          | econs _ e1 e2 => econs (subst n f e1) (subst n f e2)
+          | elet _ _ e1 e2 => elet (subst n f e1) (subst (S n) f e2)
+          | eappend _ e1 e2 => eappend (subst n f e1) (subst n f e2)
+          | emap _ _ e1 e2 => emap (subst n f e1) (subst (S n) f e2)
+          | efilter _ e1 e2 => efilter (subst n f e1) (subst (S n) f e2)*)
+          | eand e1 e2 => eand (subst _ _ n f e1) (subst n f e2)
+          | _ => fun e => e
+          end e).
+*)
 
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (lift' t1 (S O) g).
@@ -341,6 +372,8 @@ Definition map_fusion t G (e : exp G t) : exp G t.
   injection Heq. intros. subst. exact g.
   trivial.
 Defined.
+
+Extraction filter_fusion.
 
 Lemma compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
       v1:
@@ -397,9 +430,9 @@ Inductive CApp : forall t,
 
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
-    CApp v1 v2 v3 /\ CApp v1 v2 v4 -> v3 = v4.
+    CApp v1 v2 v3 -> CApp v1 v2 v4 -> v3 = v4.
 Proof.
-  intros t v1 v2 v3 v4 [H H'].
+  intros t v1 v2 v3 v4 H H'.
   dependent induction H; dependent destruction H'.
   - reflexivity.
   - rewrite (IHCApp v0). reflexivity. assumption.
@@ -493,34 +526,28 @@ Ltac ev_destructor :=
   | [ H : Ev _ _ ?v |- _ = ?v ] => dependent destruction H; try reflexivity
   end.
 
-Lemma map_determ : forall G t1 t2 (R : ev_ctx G) (e : exp (t1 :: G) t2)
-                          (v1 : val (TList t1)) (v2 : val (TList t2)) (v2' : val (TList t2)),
-    CMap R v1 e v2 -> CMap R v1 e v2' -> v2 = v2'.
-  Admitted.
-
-Lemma filter_determ : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool)
-                          (v1 : val (TList t)) (v2 : val (TList t)) (v2' : val (TList t)),
-    CFilter R v1 e v2 -> CFilter R v1 e v2' -> v2 = v2'.
-  Admitted.
-
 Check Ev_mut.
 
 Lemma ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
     Ev R e v1 -> Ev R e v2 -> v1 = v2.
 Proof.
   intros.
-  generalize dependent H0.
   generalize dependent v2.
-  induction H;
-  intros;
-  ev_destructor.
+  induction H using Ev_mut with
+      (P := fun (G : list ty) (t : ty) (R : ev_ctx G) (e : exp G t) (v : val t) (ev : Ev R e v) => forall v2, Ev R e v2 -> v = v2)
+      (P0 := fun (G : list ty) (t1 t2 : ty) (R : ev_ctx G) 
+                 (v : val (TList t1)) (e : exp (t1 :: G) t2) (v0 : val (TList t2))
+                 (ev : CMap R v e v0) => forall v2, CMap R v e v2 -> v0 = v2)
+      (P1 := fun (G : list ty) (t : ty) (R : ev_ctx G) 
+                 (v : val (TList t)) (e : exp (t :: G) TBool) (v0 : val (TList t))
+                 (ev : CFilter R v e v0) => forall v2, CFilter R v e v2 -> v0 = v2);
+    intros; try ev_destructor.
   rewrite (IHEv1 v3).
   rewrite (IHEv2 v4).
   reflexivity.
   assumption.
   assumption.
   eapply capp_determ.
-  split.
   eassumption.
   rewrite (IHEv1 v3).
   rewrite (IHEv2 v4).
@@ -534,18 +561,45 @@ Proof.
   rewrite (IHEv1 v0).
   assumption.
   assumption.
-  rewrite (IHEv v0) in H0.
-  eapply map_determ.
-  eassumption.
+  rewrite (IHEv0 v2).
+  reflexivity.
+  rewrite (IHEv v0).
   assumption.
   assumption.
-  rewrite (IHEv v0) in H0.
-  eapply filter_determ.
-  eassumption.
+  rewrite (IHEv0 v2).
+  reflexivity.
+  rewrite (IHEv v0).
   assumption.
+  assumption.
+  dependent destruction H.
+  reflexivity.
+  dependent destruction H0.
+  rewrite (IHEv0 v2'0).
+  rewrite (IHEv v1'0).
+  reflexivity.
+  assumption.
+  assumption.
+  dependent destruction H.
+  reflexivity.
+  dependent destruction H0.
+  rewrite (IHEv0 v2'0).
+  reflexivity.
+  assumption.
+  apply IHEv in H0.
+  inversion H0.
+  dependent destruction H0.
+  apply IHEv in H0.
+  inversion H0.
+  rewrite (IHEv0 v2'0).
+  reflexivity.
   assumption.
 Qed.
 
-
-  
-
+Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
+        Ev R e v1 -> Ev R (filter_fusion e) v2 -> v1 = v2.
+  intros.
+  induction H;
+    try (unfold filter_fusion in H0;
+         dependent destruction H0;
+         reflexivity).
+  Admitted.
