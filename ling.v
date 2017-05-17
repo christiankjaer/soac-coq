@@ -376,12 +376,6 @@ Defined.
 
 Extraction filter_fusion.
 
-Lemma compose_sound t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3)
-      v1:
-  expDenote g (HCons (expDenote f (HCons v1 R)) R) =
-  expDenote (compose f g) (HCons v1 R).
-  unfold compose.
-
 Lemma shift_lift : forall G t0 t1 t3 f (g : exp (t0 :: t1 :: G) t3), subExp (subShift {| f |}) (lift' t1 2 g) = g.
 Admitted.
 
@@ -516,6 +510,10 @@ Inductive Ev : forall G t, ev_ctx G -> exp G t -> val t -> Prop :=
     CApp v1 v2 v -> Ev R (eappend e1 e2) v
 | EvSucc : forall (G : ty_ctx) (R : ev_ctx G) e n,
     Ev R e (vconst n) -> Ev R (esucc e) (vconst (S n))
+| EvAndTrue : forall (G : ty_ctx) (R : ev_ctx G) e1 e2 (v : val TBool),
+    Ev R e1 vtrue -> Ev R e2 v -> Ev R (eand e1 e2) v
+| EvAndFalse : forall (G : ty_ctx) (R : ev_ctx G) e1 e2,
+    Ev R e1 vfalse -> Ev R (eand e1 e2) vfalse
 | EvLet : forall (G : ty_ctx) (R : ev_ctx G)
                  t1 t2 (e1 : exp G t1) (e2 : exp (t1 :: G) t2) v1 (v2 : val t2),
     Ev R e1 v1 -> Ev (HCons v1 R) e2 v2 -> Ev R (elet e1 e2) v2
@@ -584,9 +582,8 @@ Ltac ev_destructor :=
   | [ H : Ev _ _ ?v |- _ = ?v ] => dependent destruction H; try reflexivity
   end.
 
-Check Ev_mut.
 
-Lemma ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
+Theorem ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
     Ev R e v1 -> Ev R e v2 -> v1 = v2.
 Proof.
   intros.
@@ -615,6 +612,12 @@ Proof.
   apply IHEv in H0.
   apply vconst_congS.
   assumption.
+  apply (IHEv2 v2).
+  assumption.
+  apply IHEv1 in H1.
+  inversion H1.
+  apply IHEv in H0_.
+  inversion H0_.
   apply (IHEv2 v3).
   rewrite (IHEv1 v0).
   assumption.
@@ -655,9 +658,30 @@ Qed.
 
 Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
         Ev R e v1 -> Ev R (filter_fusion e) v2 -> v1 = v2.
+Proof.
   intros.
-  induction H;
-    try (unfold filter_fusion in H0;
-         dependent destruction H0;
-         reflexivity).
-  Admitted.
+  dependent destruction e;
+  try (unfold filter_fusion in *;
+    eapply ev_determ; eassumption; eassumption).
+  dependent destruction e2;
+    unfold filter_fusion in *;
+  try (eapply ev_determ; eassumption; eassumption).
+  simpl in H0.
+Admitted.
+  
+
+  
+
+
+Theorem map_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
+        Ev R e v1 -> Ev R (map_fusion e) v2 -> v1 = v2.
+Proof.
+  intros.
+  dependent destruction e;
+  try (unfold map_fusion in *;
+    eapply ev_determ; eassumption; eassumption).
+  dependent destruction e2;
+    unfold map_fusion in *;
+  try (eapply ev_determ; eassumption; eassumption).
+  simpl in H0.
+Admitted.
