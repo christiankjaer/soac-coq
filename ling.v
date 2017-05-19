@@ -656,6 +656,14 @@ Proof.
   assumption.
 Qed.
 
+Lemma let_id_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
+    Ev R e v1 -> Ev R (elet e (evar HFirst)) v2 -> v1 = v2.
+Proof. intros.
+       apply EvLet with (e2 := (evar HFirst)) (v2 := v1) in H.
+       apply (ev_determ H) in H0.
+       exact H0. constructor. Qed.
+  
+
 Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
         Ev R e v1 -> Ev R (filter_fusion e) v2 -> v1 = v2.
 Proof.
@@ -667,10 +675,15 @@ Proof.
     unfold filter_fusion in *;
   try (eapply ev_determ; eassumption; eassumption).
   simpl in H0.
+  dependent destruction H0.
+  dependent destruction H.
+  dependent destruction H.
+  apply (ev_determ H) in H2.
+  subst.
+  dependent destruction H3.
+  dependent destruction H1.
+  reflexivity.
 Admitted.
-  
-
-  
 
 
 Theorem map_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
