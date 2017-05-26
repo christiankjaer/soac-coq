@@ -3,11 +3,11 @@ Set Asymmetric Patterns.
 
 Notation "f 'o' g" := (fun x => f (g x)) (at level 80, right associativity).
 
-Inductive option (T : Set) : Set :=
+Inductive option (T : Type) : Type :=
 | SOME : T -> option T
 | NONE : option T.
 
-Definition compose' (A B C : Set)(f : B -> option C) (g : A -> option B) : (A -> option C) :=
+Definition compose' (A B C : Type)(f : B -> option C) (g : A -> option B) : (A -> option C) :=
   fun a => match g a with
            | NONE => NONE C
            | SOME b => f b
@@ -15,7 +15,7 @@ Definition compose' (A B C : Set)(f : B -> option C) (g : A -> option B) : (A ->
 
 Notation "f 'oo' g" := (compose' f g) (at level 80, right associativity).
 
-Inductive bool : Set := true : bool | false : bool.
+Inductive bool : Type := true : bool | false : bool.
 
 Definition and (b1 b2 : bool) : bool :=
   match b1 with
@@ -23,7 +23,7 @@ Definition and (b1 b2 : bool) : bool :=
   | true => b2
   end.
 
-Inductive list (T : Set) : Set :=
+Inductive list (T : Type) : Type :=
 | nil : list T
 | cons : T -> list T -> list T.
 
@@ -35,19 +35,19 @@ Notation "[ a ]" := (cons a nil).
 Notation "[ a ; b ; .. ; c ]" := (cons a (cons b .. (cons c nil) ..)).
 Notation "[ a ; .. ; b ]" := (cons a .. (cons b nil) ..).
 
-Fixpoint map (T T' : Set) (f : T -> T') (ls : list T) : list T' :=
+Fixpoint map (T T' : Type) (f : T -> T') (ls : list T) : list T' :=
   match ls with
-  | [] => []
+  | nil => nil
   | cons x ls' => cons (f x) (map f ls')
   end.
 
-Fixpoint filter (T : Set) (p : T -> bool) (ls : list T) : list T :=
+Fixpoint filter (T : Type) (p : T -> bool) (ls : list T) : list T :=
   match ls with
-  | [] => []
+  | nil => nil
   | cons x ls' => if p x then cons x (filter p ls') else filter p ls'
   end.
 
-Fixpoint mapPartial (T T' : Set) (f : T -> option T') (ls : list T) : list T' :=
+Fixpoint mapPartial (T T' : Type) (f : T -> option T') (ls : list T) : list T' :=
   match ls with
   | nil => nil
   | cons x ls' => match (f x) with
@@ -56,7 +56,7 @@ Fixpoint mapPartial (T T' : Set) (f : T -> option T') (ls : list T) : list T' :=
                   end
   end.
 
-Theorem map_fusion : forall (T T' T'' : Set) (f : T' -> T'')
+Theorem map_fusion : forall (T T' T'' : Type) (f : T' -> T'')
                             (g : T -> T') (ls : list T),
     map f (map g ls) = map (f o g) ls.
   induction ls. reflexivity.
@@ -75,7 +75,7 @@ Lemma and_false_r : forall b : bool,
   destruct b; reflexivity.
 Qed.
 
-Theorem filter_fusion : forall (T : Set) (p q : T -> bool)
+Theorem filter_fusion : forall (T : Type) (p q : T -> bool)
                                (ls : list T),
     filter p (filter q ls) = filter (fun x => and (p x) (q x)) ls.
 Proof.
@@ -86,6 +86,26 @@ Proof.
     * rewrite (and_false_r (p t)). rewrite IHls. reflexivity.
 Qed.
 
-Lemma mapPartial_fusion : forall (T T' T'' : Set) (f : T' -> option T'')
+Lemma mapPartial_fusion : forall (T T' T'' : Type) (f : T' -> option T'')
                                  (g : T -> option T') (ls : list T),
     ((mapPartial f) o (mapPartial g)) ls = mapPartial (f oo g) ls.
+Admitted.
+
+
+Fixpoint foldr (T T' : Type) (f : T -> T' -> T') (z : T') (xs : list T) : T' :=
+  match xs with
+  | nil => z
+  | cons x xs' => f x (foldr f z xs')
+  end.
+
+Check cons.
+Check nil.
+
+Definition build (A : Type) (g : forall B, (A -> B -> B) -> B -> B) : list A :=
+  g (@cons A) (@nil A).
+
+Definition build : forall A, (forall B, (A -> B -> B) -> B -> B) -> list A.
+  
+  
+
+Theorem foldr_build T T' : forall g (k : T -> T' -> T') (z : T'), foldr k z (build g) = g k z.
