@@ -424,9 +424,7 @@ Proof.
   rewrite IHg1.
 Admitted. 
 
-
-
-  
+ 
 (*
  expDenote g2 (HCons (expDenote g1 (HCons (expDenote f (HCons v1 R)) R)) (HCons (expDenote f (HCons v1 R)) R)) =
   expDenote (subExp (subShift {|f|}) (lift' t1 2 g2))
@@ -479,6 +477,21 @@ Inductive CApp : forall t,
 | CAppCons : forall t v (v1 : val t) v2 v3,
     CApp v2 v3 v -> CApp (vcons v1 v2) v3 (vcons v1 v).
 
+
+Lemma capp_total : forall t (v1 v2 : val (TList t)),
+    exists v, CApp v1 v2 v.
+Proof.
+  intros.
+  dependent induction v1.
+  exists v2.
+  constructor.
+  destruct (IHv1_2 t v1_2) with (v2 := v2).
+  reflexivity.
+  reflexivity.
+  exists (vcons v1_1 x).
+  econstructor.
+  assumption.
+Qed.
 
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
@@ -577,14 +590,93 @@ Proof.
   congruence.
 Qed.
 
+
+Theorem ev_total : forall G t (R : ev_ctx G) (e : exp G t),
+    exists v, Ev R e v.
+Proof.
+  intros.
+  dependent induction e.
+  - (eexists; constructor).
+  - (eexists; constructor).
+  - (eexists; constructor).
+  - (eexists; constructor).
+  - destruct (IHe R).
+    dependent destruction x.
+    exists (vconst (S n)).
+    constructor.
+    assumption.
+  - destruct (IHe1 R).
+    destruct (IHe2 R).
+    dependent destruction x;
+      dependent destruction x0.
+    exists vtrue.
+    constructor.
+    assumption.
+    assumption.
+    exists vfalse.
+    constructor.
+    assumption.
+    assumption.
+    exists vfalse.
+    apply EvAndFalse.
+    assumption.
+    exists vfalse.
+    apply EvAndFalse.
+    assumption.
+  - (eexists; constructor).
+  - destruct (IHe1 R).
+    destruct (IHe2 R).
+    exists (vcons x x0).
+    constructor.
+    assumption.
+    assumption.
+  - destruct (IHe1 R).
+    destruct (IHe2 (HCons x R)).
+    exists x0.
+    eapply EvLet.
+    eassumption.
+    assumption.
+  - destruct (IHe1 R).
+    destruct (IHe2 R).
+    assert (exists v, CApp x x0 v).
+    apply capp_total with (v1 := x) (v2 := x0).
+    destruct H1.
+    exists x1.
+    eapply EvAppend.
+    eassumption.
+    eassumption.
+    assumption.
+  - destruct (IHe2 R).
+    assert (exists v, CMap R x e1 v).
+    * dependent induction x.
+      + exists (vnil t2).
+        constructor.
+      + admit.
+    * destruct H0.
+      exists x0.
+      eapply EvMap.
+      eassumption.
+      eassumption.
+  - destruct (IHe2 R).
+    assert (exists v, CFilter R x e1 v).
+    * dependent induction x.
+      + exists (vnil t1).
+        constructor.
+      + admit.
+    * destruct H0.
+        exists x0.
+        eapply EvFilter.
+        eassumption.
+        eassumption.
+Admitted.
+
 Ltac ev_destructor :=
   match goal with
   | [ H : Ev _ _ ?v |- _ = ?v ] => dependent destruction H; try reflexivity
   end.
-
-
+  
 Theorem ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
-    Ev R e v1 -> Ev R e v2 -> v1 = v2.
+      Ev R e v1 -> Ev R e v2 -> v1 = v2.
 Proof.
   intros.
   generalize dependent v2.
@@ -597,16 +689,16 @@ Proof.
                  (v : val (TList t)) (e : exp (t :: G) TBool) (v0 : val (TList t))
                  (ev : CFilter R v e v0) => forall v2, CFilter R v e v2 -> v0 = v2);
     intros; try ev_destructor.
-  rewrite (IHEv1 v3).
-  rewrite (IHEv2 v4).
+  erewrite IHEv1.
+  erewrite IHEv2.
   reflexivity.
   assumption.
   assumption.
   eapply capp_determ.
   eassumption.
-  rewrite (IHEv1 v3).
-  rewrite (IHEv2 v4).
-  assumption.
+  erewrite IHEv1.
+  erewrite IHEv2.
+  eassumption.
   assumption.
   assumption.
   apply IHEv in H0.
@@ -675,14 +767,26 @@ Proof.
     unfold filter_fusion in *;
   try (eapply ev_determ; eassumption; eassumption).
   simpl in H0.
-  dependent destruction H0.
   dependent destruction H.
   dependent destruction H.
+  dependent destruction H2.
   apply (ev_determ H) in H2.
   subst.
+  dependent induction v3.
   dependent destruction H3.
+  dependent destruction H0.
   dependent destruction H1.
   reflexivity.
+  dependent destruction H3.
+  erewrite IHv3_2.
+  reflexivity.
+  reflexivity.
+  reflexivity.
+  exact H0.
+
+  
+
+
 Admitted.
 
 
