@@ -170,6 +170,11 @@ Fixpoint renameExp G G' t (r : Ren G G') (e : exp G t) :=
 Definition shiftExp G t t' : exp G t -> exp (t' :: G) t :=
   renameExp (fun _ v => HNext v).
 
+Definition shift2Exp G t1 t2 t3 : exp (t2 :: G) t3 -> exp (t2 :: t1 :: G) t3.
+  refine (renameExp (fun _ v => _)).
+  inversion v; subst; repeat constructor; auto.
+Defined.
+
 Program Definition
         subShift {G G'} t (s : Sub G G') : Sub (t :: G) (t :: G') :=
   fun t' v =>
@@ -193,6 +198,9 @@ Fixpoint subExp G G' t (s : Sub G G') (e : exp G t) :=
   | emap _ _ e1 e2 => emap (subExp (subShift s) e1) (subExp s e2)
   | efilter _ e1 e2 => efilter (subExp (subShift s) e1) (subExp s e2)
   end.
+
+Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
+  subExp {| f |} (shift2Exp _ g).
 
 Fixpoint tyDenote (t : ty) : Type :=
   match t with
@@ -261,91 +269,7 @@ Definition hdSub {G G' t} (s : Sub (t :: G) G') : exp G' t :=
 Definition ty_ctx := list ty.
 Definition ev_ctx G := hlist val G.
 
-Fixpoint insertAt (t : ty) (G : ty_ctx) (n : nat) {struct n} : ty_ctx :=
-  match n with
-  | O => t :: G
-  | S n' => match G with
-            | nil => t :: G
-            | t' :: G' => t' :: insertAt t G' n'
-            end
-  end.
-
-Fixpoint liftVar t G (x : member t G) t' n
-  : member t (insertAt t' G n) :=
-  match x with
-  | HFirst G' => match n return member t (insertAt t' (t :: G') n) with
-                 | O => HNext HFirst
-                 | _ => HFirst
-                 end
-  | HNext t'' G' x' => match n return member t (insertAt t' (t'' :: G') n) with
-                       | O => HNext (HNext x')
-                       | S n' => HNext (liftVar x' t' n')
-                       end
-  end.
-
-Fixpoint lift' G t' n t (e : exp G t) : exp (insertAt t' G n) t :=
-  match e with
-  | evar _ x => evar (liftVar x t' n)
-  | econst n => econst n
-  | etrue => etrue
-  | efalse => efalse
-  | esucc e => esucc (lift' t' n e)
-  | eand e1 e2 => eand (lift' t' n e1) (lift' t' n e2)
-  | enil _ => enil
-  | econs _ e1 e2 => econs (lift' t' n e1) (lift' t' n e2)
-  | elet _ _ e1 e2 => elet (lift' t' n e1) (lift' t' (S n) e2)
-  | eappend _ e1 e2 => eappend (lift' t' n e1) (lift' t' n e2)
-  | emap _ _ e1 e2 => emap (lift' t' (S n) e1) (lift' t' n e2)
-  | efilter _ e1 e2 => efilter (lift' t' (S n) e1) (lift' t' n e2)
-  end.
-
-Check lift'.
-
-Definition lift G t' t (e : exp G t) : exp (t' :: G) t :=
-  lift' t' O e.
-Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
-  subExp {| f |} (lift' t1 (S O) g).
-
-Check lift.
-
-(* Fixpoint substVar G t (f : exp G t) n : member t G -> exp G t :=
-  fun m =>
-    match m with
-    | HFirst G' => match n with
-                   | O => f
-                   | _ => HFirst
-                   end
-    | HNext t' G' x' => match n with
-                        | O => HNext t' G' x'
-                        | S n' => substVar f n'
-                        end
-    end.
-(* subst f for index n in e *)
-Fixpoint subst G t (n : nat) (f : exp G t) (e : exp G t) : exp G t.
-  refine (match e in exp _ t' return exp G t' -> exp G t' with
-          (*| esucc e => fun _ => esucc (subst G t n f e)
-          | eand e1 e2 => eand (subst n f e1) (subst n f e2)
-          | econs _ e1 e2 => econs (subst n f e1) (subst n f e2)
-          | elet _ _ e1 e2 => elet (subst n f e1) (subst (S n) f e2)
-          | eappend _ e1 e2 => eappend (subst n f e1) (subst n f e2)
-          | emap _ _ e1 e2 => emap (subst n f e1) (subst (S n) f e2)
-          | efilter _ e1 e2 => efilter (subst n f e1) (subst (S n) f e2)*)
-          | eand e1 e2 => eand (subst _ _ n f e1) (subst n f e2)
-          | _ => fun e => e
-          end e).
-*)
-
-
-(*
-Definition filter_fusion' t G (e : exp G t) : exp G t :=
-  match e with
-  | efilter t' p el => match el with
-                       | efilter t' q body => efilter (eand p q) body
-                       | _ => e
-                       end
-  | _ => e
-  end. *)
-
+Eval compute in compose (econst 10) (elet (econst 10) (evar (HFirst))).
 
 Definition filter_fusion t G (e : exp G t) : exp G t.
   refine
@@ -376,61 +300,30 @@ Defined.
 
 Extraction filter_fusion.
 
-Lemma shift_lift : forall G t0 t1 t3 f (g : exp (t0 :: t1 :: G) t3), subExp (subShift {| f |}) (lift' t1 2 g) = g.
-Admitted.
 
 Lemma compose_sound : forall t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) v1,
     expDenote g (HCons (expDenote f (HCons v1 R)) R) =
     expDenote (compose f g) (HCons v1 R).
 Proof.
-  unfold compose.
   intros.
   generalize dependent f.
   generalize dependent v1.
   dependent induction g; intros; try reflexivity.
-  dependent destruction m.
-  reflexivity.
-  unfold subExp.
-  simpl.
-  destruct G.
-  inversion m.
-  dependent destruction m.
-  simpl.
-  reflexivity.
-  simpl.
-  reflexivity.
-  simpl.
-  rewrite IHg.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  simpl.
-  rewrite IHg1.
-  rewrite IHg2.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  simpl.
-  rewrite IHg1.
-  rewrite IHg2.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  simpl.
-  rewrite IHg1.
-Admitted. 
-
- 
-(*
- expDenote g2 (HCons (expDenote g1 (HCons (expDenote f (HCons v1 R)) R)) (HCons (expDenote f (HCons v1 R)) R)) =
-  expDenote (subExp (subShift {|f|}) (lift' t1 2 g2))
-    (HCons (expDenote g1 (HCons (expDenote f (HCons v1 R)) R)) (HCons v1 R))
-*)
-  
+  - dependent destruction m; try reflexivity.
+  - simpl. rewrite IHg; try reflexivity.
+  - simpl.
+    rewrite IHg1; try reflexivity.
+    rewrite IHg2; try reflexivity.
+  - simpl.
+    rewrite IHg1; try reflexivity.
+    rewrite IHg2; try reflexivity.
+  - admit. (* let case *)
+  - simpl.
+    rewrite IHg1; try reflexivity.
+    rewrite IHg2; try reflexivity.
+  - admit. (* map case *)
+  - admit. (* filter case *)
+Admitted.
   
 Theorem map_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (map_fusion e) s.
 Proof.
@@ -756,49 +649,47 @@ Proof. intros.
        exact H0. constructor. Qed.
   
 
-Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
-        Ev R e v1 -> Ev R (filter_fusion e) v2 -> v1 = v2.
+Lemma and_r_false : forall G (R : ev_ctx G) (e1 e2 : exp G TBool),
+    Ev R e2 vfalse -> Ev R (eand e1 e2) vfalse.
+Proof.
+Admitted.
+
+Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
+        Ev R e v -> Ev R (filter_fusion e) v.
 Proof.
   intros.
   dependent destruction e;
-  try (unfold filter_fusion in *;
-    eapply ev_determ; eassumption; eassumption).
+    try (unfold filter_fusion;
+         assumption).
   dependent destruction e2;
-    unfold filter_fusion in *;
-  try (eapply ev_determ; eassumption; eassumption).
-  simpl in H0.
+    try (unfold filter_fusion;
+         assumption).
+  simpl.
   dependent destruction H.
   dependent destruction H.
-  dependent destruction H2.
-  apply (ev_determ H) in H2.
-  subst.
-  dependent induction v3.
-  dependent destruction H3.
+  econstructor.
+  exact H.
+  dependent induction v1.
   dependent destruction H0.
   dependent destruction H1.
-  reflexivity.
-  dependent destruction H3.
-  erewrite IHv3_2.
-  reflexivity.
-  reflexivity.
-  reflexivity.
-  exact H0.
-
-  
-
-
+  constructor.
+  dependent destruction v.
+  dependent destruction v0.
+  dependent destruction H0.
+  eapply CFilterFalse.
+  apply and_r_false.
 Admitted.
 
 
-Theorem map_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
-        Ev R e v1 -> Ev R (map_fusion e) v2 -> v1 = v2.
+Theorem map_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
+        Ev R e v -> Ev R (map_fusion e) v.
 Proof.
   intros.
   dependent destruction e;
   try (unfold map_fusion in *;
-    eapply ev_determ; eassumption; eassumption).
+       assumption).
   dependent destruction e2;
-    unfold map_fusion in *;
-  try (eapply ev_determ; eassumption; eassumption).
-  simpl in H0.
+  try (unfold map_fusion in *;
+       assumption).
+
 Admitted.
