@@ -4,108 +4,9 @@ Require Import Program.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
-(* Adam Chlipalas heterogeneous list implementation (magic inside)
- * Useful for De Bruijn indices
- *)
-
-Section hlist.
-  Variable A : Type.
-  Variable B : A -> Type.
-
-  Inductive hlist : list A -> Type :=
-  | HNil : hlist nil
-  | HCons : forall (x : A) (ls : list A), B x -> hlist ls -> hlist (x :: ls).
-
-  Variable elm : A.
-
-  Inductive member : list A -> Type :=
-  | HFirst : forall ls, member (elm :: ls)
-  | HNext : forall x ls, member ls -> member (x :: ls).
-
-  Fixpoint hget ls (mls : hlist ls) : member ls -> B elm :=
-    match mls with
-    | HNil
-      => fun mem =>
-           match mem in member ls'
-                 return (match ls' with
-                         | nil => B elm
-                         | _ :: _ => unit
-                         end) with
-           | HFirst _ => tt
-           | HNext _ _ _ => tt
-           end
-    | HCons _ _ x mls'
-      => fun mem =>
-           match mem in member ls'
-                 return (match ls' with
-                         | nil => Empty_set
-                         | x' :: ls'' =>
-                           B x' -> (member ls'' -> B elm)
-                           -> B elm
-                         end) with
-           | HFirst _ => fun x _ => x
-           | HNext _ _ mem' => fun _ get_mls' => get_mls' mem'
-           end x (hget mls')
-    end.
-  
-End hlist.
-
-Arguments HNil [A B].
-Arguments HCons [A B x ls].
-
-Arguments HFirst [A elm ls].
-Arguments HNext [A elm x ls].
-
-Inductive ty : Type :=
-| TBool : ty
-| TNat : ty
-| TList : ty -> ty.
-
-Lemma ty_eq_dec :
-  forall t1 t2 : ty, {t1 = t2} + {t1 <> t2}.
-Proof.
-  decide equality.
-Qed.
-
-Definition env := list ty.
-
-(* Intrinsically typed expression syntax *)
-Inductive exp G : ty -> Type :=
-| evar : forall t, member t G -> exp G t
-| etrue : exp G TBool
-| efalse : exp G TBool
-| econst : nat -> exp G TNat
-| esucc : exp G TNat -> exp G TNat
-| eand : exp G TBool -> exp G TBool -> exp G TBool
-| enil : forall t, exp G (TList t)
-| econs : forall t, exp G t -> exp G (TList t) -> exp G (TList t)
-| elet : forall t1 t2, exp G t1 -> exp (t1 :: G) t2 -> exp G t2
-| eappend : forall t, exp G (TList t) -> exp G (TList t) -> exp G (TList t)
-| emap : forall t1 t2, exp (t1 :: G) t2 -> exp G (TList t1) -> exp G (TList t2)
-| efilter : forall t1, exp (t1 :: G) TBool -> exp G (TList t1) -> exp G (TList t1).
-
-Arguments econst [G].
-Arguments etrue [G].
-Arguments efalse [G].
-Arguments enil [G t].
-
-Notation "[| |]" := enil.
-Notation "[| x |]" := (econs x enil).
-Notation "[| x ; y ; .. ; z |]" := (econs x (econs y .. (econs z enil) ..)).
-Notation "[| x ; .. ; y |]" := (econs x .. (econs y enil) ..).
-
-(* Intrinsically typed values as well *)
-Inductive val : ty -> Type :=
-| vtrue : val TBool
-| vfalse : val TBool
-| vconst : nat -> val TNat
-| vnil : forall t, val (TList t)
-| vcons : forall t, val t -> val (TList t) -> val (TList t).
-
-Notation "[|| ||]" := vnil.
-Notation "[|| x ||]" := (vcons x vnil).
-Notation "[|| x ; y ; .. ; z ||]" := (vcons x (vcons y .. (vcons z vnil) ..)).
-Notation "[|| x ; .. ; y ||]" := (vcons x .. (vcons y vnil) ..).
+Load hlist.
+Load ling_syntax.
+Load ling_semantics.
 
 Example inc : exp nil (TList TNat) :=
   emap (esucc (evar HFirst)) (econs (econst 4) (econs (econst 5) enil)).
@@ -126,6 +27,12 @@ Example flat_map : exp nil (TList TNat) :=
   emap (esucc (esucc (evar HFirst)))
        [| econst 1 ; econst 2 ; econst 3 |].
 
+Eval compute in (expDenote app_prog) HNil.
+Eval compute in (expDenote let_ex) HNil.
+Eval compute in (expDenote inc) HNil.
+
+(* Transformations *)
+
 Definition Sub G G' := forall t, member t G -> exp G' t. 
 
 Definition idSub {G} : Sub G G := @evar G.
@@ -139,7 +46,7 @@ Program Definition consSub {G G' t} (e:exp G' t) (s:Sub G G') : Sub (t::G) G' :=
     
 Notation "{| e ; .. ; f |}" := (consSub e .. (consSub f idSub) ..).
 
-Check @member.
+(* A renaming of environments are where all variables a members of both *)
 
 Definition Ren G G' := forall t, @member ty t G -> @member ty t G'.
 
@@ -202,72 +109,11 @@ Fixpoint subExp G G' t (s : Sub G G') (e : exp G t) :=
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (shift2Exp _ g).
 
-Fixpoint tyDenote (t : ty) : Type :=
-  match t with
-  | TBool => bool
-  | TNat => nat
-  | TList t => list (tyDenote t)
-  end.
-
-Fixpoint valDenote t (v : val t) : tyDenote t :=
-  match v with
-  | vfalse => false
-  | vtrue => true
-  | vconst n => n
-  | vnil _ => nil
-  | vcons _ v1 v2 => (valDenote v1) :: (valDenote v2)
-  end.
-
-(* An interpreter *)
-Fixpoint expDenote G t (e : exp G t) : hlist tyDenote G -> tyDenote t :=
-  match e with
-  | evar _ x => fun s => hget s x 
-  | econst n => fun _ => n
-  | etrue => fun _ => true
-  | efalse => fun _ => false
-  | esucc e => fun s => S (expDenote e s)
-  | eand e1 e2 => fun s => (expDenote e1 s) && (expDenote e2 s)
-  | enil _ => fun _ => nil
-  | econs _ e1 e2 => fun s => (expDenote e1 s) :: (expDenote e2 s)
-  | elet _ _ e el =>
-    fun s => expDenote el (HCons (expDenote e s) s)
-  | eappend _ e1 e2 => fun s => app (expDenote e1 s) (expDenote e2 s)
-  | emap _ _ ef e =>
-    fun s => let f := fun x => expDenote ef (HCons x s)
-             in map f (expDenote e s)
-  | efilter _ ef e =>
-    fun s => let f := fun x => expDenote ef (HCons x s)
-             in filter f (expDenote e s)
-  end.
-
-Eval compute in (expDenote app_prog) HNil.
-Eval compute in (expDenote let_ex) HNil.
-Eval compute in (expDenote inc) HNil.
-
-Lemma map_id : forall G t (e : exp G t) s,
-    expDenote (elet e (evar HFirst)) s = expDenote e s.
-Proof.
-  intros. simpl. reflexivity.
-Qed.
-  
-Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
-    expDenote (eappend (eappend e1 e2) e3) s =
-    expDenote (eappend e1 (eappend e2 e3)) s.
-Proof.
-  intros.
-  simpl.
-  rewrite <- app_assoc.
-  reflexivity.
-Qed.
-
 Definition tlSub {G G' t} (s : Sub (t :: G) G') : Sub G G' :=
   fun t' v => s t' (HNext v).
 
 Definition hdSub {G G' t} (s : Sub (t :: G) G') : exp G' t :=
   s t HFirst.
-
-Definition ty_ctx := list ty.
-Definition ev_ctx G := hlist val G.
 
 Eval compute in compose (econst 10) (elet (econst 10) (evar (HFirst))).
 
@@ -298,8 +144,21 @@ Definition map_fusion t G (e : exp G t) : exp G t.
   trivial.
 Defined.
 
-Extraction filter_fusion.
-
+Lemma map_id : forall G t (e : exp G t) s,
+    expDenote (elet e (evar HFirst)) s = expDenote e s.
+Proof.
+  intros. simpl. reflexivity.
+Qed.
+  
+Lemma append_assoc : forall G t (e1 e2 e3: exp G (TList t)) s,
+    expDenote (eappend (eappend e1 e2) e3) s =
+    expDenote (eappend e1 (eappend e2 e3)) s.
+Proof.
+  intros.
+  simpl.
+  rewrite <- app_assoc.
+  reflexivity.
+Qed.
 
 Lemma compose_sound : forall t1 t2 t3 G R (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) v1,
     expDenote g (HCons (expDenote f (HCons v1 R)) R) =
@@ -317,7 +176,10 @@ Proof.
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
-  - admit. (* let case *)
+  - simpl.
+    rewrite IHg1.
+
+
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
@@ -363,12 +225,6 @@ Theorem filter_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (fil
       reflexivity.
 Qed.
 
-(* Inductive judgment for append *)
-Inductive CApp : forall t,
-    val (TList t) -> val (TList t) -> val (TList t) -> Prop :=
-| CAppNil : forall t (v : val (TList t)), CApp (vnil t) v v
-| CAppCons : forall t v (v1 : val t) v2 v3,
-    CApp v2 v3 v -> CApp (vcons v1 v2) v3 (vcons v1 v).
 
 
 Lemma capp_total : forall t (v1 v2 : val (TList t)),
@@ -376,15 +232,19 @@ Lemma capp_total : forall t (v1 v2 : val (TList t)),
 Proof.
   intros.
   dependent induction v1.
-  exists v2.
-  constructor.
-  destruct (IHv1_2 t v1_2) with (v2 := v2).
-  reflexivity.
-  reflexivity.
-  exists (vcons v1_1 x).
-  econstructor.
-  assumption.
+  - exists v2.
+    constructor.
+  - destruct (IHv1_2 t v1_2) with (v2 := v2).
+    reflexivity.
+    reflexivity.
+    exists (vcons v1_1 x).
+    econstructor.
+    assumption.
 Qed.
+
+Ltac rewriter H :=
+  erewrite H; try reflexivity; try eassumption; clear H.
+  
 
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
@@ -393,73 +253,9 @@ Proof.
   intros t v1 v2 v3 v4 H H'.
   dependent induction H; dependent destruction H'.
   - reflexivity.
-  - rewrite (IHCApp v0). reflexivity. assumption.
+  - rewriter IHCApp.
 Qed.
 
-Inductive Ev : forall G t, ev_ctx G -> exp G t -> val t -> Prop :=
-| EvVar : forall G R t (m : member t G),
-    Ev R (evar m) (hget R m)
-| EvTrue : forall (G : ty_ctx) (R : ev_ctx G),
-    Ev R etrue vtrue
-| EvFalse : forall (G : ty_ctx) (R : ev_ctx G),
-    Ev R efalse vfalse
-| EvConst : forall (G : ty_ctx) (R : ev_ctx G) n,
-    Ev R (econst n) (vconst n)
-| EvNil : forall (G : ty_ctx) (R : ev_ctx G) t,
-    Ev R enil (vnil t)
-| EvCons : forall (G : ty_ctx) (R : ev_ctx G)
-                  t e1 e2 (v1 : val t) (v2 : val (TList t)),
-    Ev R e1 v1 -> Ev R e2 v2 -> Ev R (econs e1 e2) (vcons v1 v2)
-| EvAppend : forall (G : ty_ctx) (R : ev_ctx G) t
-                    (e1 e2 : exp G (TList t)) (v1 v2 : val (TList t)) v,
-    Ev R e1 v1 -> Ev R e2 v2 ->
-    CApp v1 v2 v -> Ev R (eappend e1 e2) v
-| EvSucc : forall (G : ty_ctx) (R : ev_ctx G) e n,
-    Ev R e (vconst n) -> Ev R (esucc e) (vconst (S n))
-| EvAndTrue : forall (G : ty_ctx) (R : ev_ctx G) e1 e2 (v : val TBool),
-    Ev R e1 vtrue -> Ev R e2 v -> Ev R (eand e1 e2) v
-| EvAndFalse : forall (G : ty_ctx) (R : ev_ctx G) e1 e2,
-    Ev R e1 vfalse -> Ev R (eand e1 e2) vfalse
-| EvLet : forall (G : ty_ctx) (R : ev_ctx G)
-                 t1 t2 (e1 : exp G t1) (e2 : exp (t1 :: G) t2) v1 (v2 : val t2),
-    Ev R e1 v1 -> Ev (HCons v1 R) e2 v2 -> Ev R (elet e1 e2) v2
-| EvMap : forall (G : ty_ctx) (R : ev_ctx G) t1 t2
-                 (e1 : exp (t1 :: G) t2) (e2 : exp G (TList t1)) v v',
-                 Ev R e2 v ->
-                 CMap R v e1 v' ->
-                 Ev R (emap e1 e2) v'
-| EvFilter : forall (G : ty_ctx) (R : ev_ctx G) t
-                 (e1 : exp (t :: G) TBool) (e2 : exp G (TList t)) v v',
-                 Ev R e2 v ->
-                 CFilter R v e1 v' ->
-                 Ev R (efilter e1 e2) v'
- with CMap : forall G t1 t2,
-    ev_ctx G -> val (TList t1) -> exp (t1 :: G) t2 -> val (TList t2) -> Prop :=
-      | CMapNil : forall (G : ty_ctx) (R : ev_ctx G) t1 t2 (e : exp (t1 :: G) t2),
-          CMap R (vnil t1) e (vnil t2)
-      | CMapCons : forall (G : ty_ctx) (R : ev_ctx G) t1 t2 (e : exp (t1 :: G) t2)
-        v1 v2 v1' v2',
-          Ev (HCons v1 R) e v1' ->
-          CMap R v2 e v2' ->
-          CMap R (vcons v1 v2) e (vcons v1' v2')
- with CFilter : forall G t,
-     ev_ctx G -> val (TList t) -> exp (t :: G) TBool -> val (TList t) -> Prop :=
-      | CFilterNil : forall (G : ty_ctx) (R : ev_ctx G) t (e : exp (t :: G) TBool),
-          CFilter R (vnil t) e (vnil t)
-      | CFilterTrue : forall (G : ty_ctx) (R : ev_ctx G) t (e : exp (t :: G) TBool) v1 v2 v2',
-          Ev (HCons v1 R) e vtrue ->
-          CFilter R v2 e v2' ->
-          CFilter R (vcons v1 v2) e (vcons v1 v2')
-      | CFilterFalse : forall (G : ty_ctx) (R : ev_ctx G) t (e : exp (t :: G) TBool) v1 v2 v2',
-          Ev (HCons v1 R) e vfalse ->
-          CFilter R v2 e v2' ->
-          CFilter R (vcons v1 v2) e v2'.
-
-Scheme Ev_mut := Induction for Ev Sort Prop
-                 with CMap_mut := Induction for CMap Sort Prop
-                                  with CFilter_mut := Induction for CFilter Sort Prop.
-
-Check Ev_mut.
 
 Example ev_example :
   Ev (HCons (vconst 1) HNil) (evar HFirst) (vconst 1).
@@ -473,7 +269,7 @@ Qed.
 
 Example ev_map :
   Ev HNil (emap (esucc (evar HFirst)) [| econst 10 ; econst 11 |])
-     (vcons (vconst 11) (vcons (vconst 12) (vnil TNat))).
+     (vcons (vconst 11) (vcons (vconst 12) vnil)).
 repeat econstructor.
 Qed.
 
@@ -482,7 +278,6 @@ Proof.
   intros.
   congruence.
 Qed.
-
 
 Theorem ev_total : forall G t (R : ev_ctx G) (e : exp G t),
     exists v, Ev R e v.
@@ -542,7 +337,7 @@ Proof.
   - destruct (IHe2 R).
     assert (exists v, CMap R x e1 v).
     * dependent induction x.
-      + exists (vnil t2).
+      + exists vnil.
         constructor.
       + admit.
     * destruct H0.
@@ -553,7 +348,7 @@ Proof.
   - destruct (IHe2 R).
     assert (exists v, CFilter R x e1 v).
     * dependent induction x.
-      + exists (vnil t1).
+      + exists vnil.
         constructor.
       + admit.
     * destruct H0.
@@ -567,7 +362,7 @@ Ltac ev_destructor :=
   match goal with
   | [ H : Ev _ _ ?v |- _ = ?v ] => dependent destruction H; try reflexivity
   end.
-  
+
 Theorem ev_determ : forall G t (R : ev_ctx G) (e: exp G t) v1 v2,
       Ev R e v1 -> Ev R e v2 -> v1 = v2.
 Proof.
@@ -582,63 +377,41 @@ Proof.
                  (v : val (TList t)) (e : exp (t :: G) TBool) (v0 : val (TList t))
                  (ev : CFilter R v e v0) => forall v2, CFilter R v e v2 -> v0 = v2);
     intros; try ev_destructor.
-  erewrite IHEv1.
-  erewrite IHEv2.
-  reflexivity.
-  assumption.
-  assumption.
-  eapply capp_determ.
-  eassumption.
-  erewrite IHEv1.
-  erewrite IHEv2.
-  eassumption.
-  assumption.
-  assumption.
-  apply IHEv in H0.
-  apply vconst_congS.
-  assumption.
-  apply (IHEv2 v2).
-  assumption.
-  apply IHEv1 in H1.
-  inversion H1.
-  apply IHEv in H0_.
-  inversion H0_.
-  apply (IHEv2 v3).
-  rewrite (IHEv1 v0).
-  assumption.
-  assumption.
-  rewrite (IHEv0 v2).
-  reflexivity.
-  rewrite (IHEv v0).
-  assumption.
-  assumption.
-  rewrite (IHEv0 v2).
-  reflexivity.
-  rewrite (IHEv v0).
-  assumption.
-  assumption.
-  dependent destruction H.
-  reflexivity.
-  dependent destruction H0.
-  rewrite (IHEv0 v2'0).
-  rewrite (IHEv v1'0).
-  reflexivity.
-  assumption.
-  assumption.
-  dependent destruction H.
-  reflexivity.
-  dependent destruction H0.
-  rewrite (IHEv0 v2'0).
-  reflexivity.
-  assumption.
-  apply IHEv in H0.
-  inversion H0.
-  dependent destruction H0.
-  apply IHEv in H0.
-  inversion H0.
-  rewrite (IHEv0 v2'0).
-  reflexivity.
-  assumption.
+  - rewriter IHEv1.
+    rewriter IHEv2.
+  - eapply capp_determ.
+    eassumption.
+    rewriter IHEv1.
+    rewriter IHEv2.
+  - apply IHEv in H0.
+    apply vconst_congS.
+    assumption.
+  - rewriter IHEv2.
+  - apply IHEv1 in H1.
+    inversion H1.
+  - apply IHEv in H0_.
+    inversion H0_.
+  - rewriter IHEv2.
+    rewriter IHEv1.
+  - rewriter IHEv0.
+    rewriter IHEv.
+  - rewriter IHEv0.
+    rewriter IHEv.
+  - dependent destruction H.
+    reflexivity.
+  - dependent destruction H0.
+    rewriter IHEv0.
+    rewriter IHEv.
+  - dependent destruction H.
+    reflexivity.
+  - dependent destruction H0.
+    rewriter IHEv0.
+    apply IHEv in H0.
+    inversion H0.
+  - dependent destruction H0.
+    apply IHEv in H0.
+    inversion H0.
+    rewriter IHEv0.
 Qed.
 
 Lemma let_id_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v1 v2 : val t),
@@ -651,6 +424,7 @@ Proof. intros.
 
 Lemma and_r_false : forall G (R : ev_ctx G) (e1 e2 : exp G TBool),
     Ev R e2 vfalse -> Ev R (eand e1 e2) vfalse.
+
 Proof.
 Admitted.
 
