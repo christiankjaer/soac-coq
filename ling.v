@@ -177,9 +177,7 @@ Proof.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
   - simpl.
-    rewrite IHg1.
-
-
+    admit.
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
@@ -224,8 +222,6 @@ Theorem filter_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (fil
       rewrite <- IHt.
       reflexivity.
 Qed.
-
-
 
 Lemma capp_total : forall t (v1 v2 : val (TList t)),
     exists v, CApp v1 v2 v.
@@ -339,7 +335,8 @@ Proof.
     * dependent induction x.
       + exists vnil.
         constructor.
-      + admit.
+      + destruct (IHe1 (HCons x1 R)).
+        admit.
     * destruct H0.
       exists x0.
       eapply EvMap.
@@ -426,7 +423,14 @@ Lemma and_r_false : forall G (R : ev_ctx G) (e1 e2 : exp G TBool),
     Ev R e2 vfalse -> Ev R (eand e1 e2) vfalse.
 
 Proof.
-Admitted.
+  intros.
+  assert (exists v, Ev R e1 v).
+  apply ev_total.
+  destruct H0.
+  dependent induction x.
+  apply EvAndTrue; auto.
+  apply EvAndFalse; auto.
+Qed.
 
 Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
         Ev R e v -> Ev R (filter_fusion e) v.
@@ -443,15 +447,22 @@ Proof.
   dependent destruction H.
   econstructor.
   exact H.
-  dependent induction v1.
+  dependent induction v.
+  apply CFilterNil.
+  inversion H1.
+  inversion H0.
   dependent destruction H0.
-  dependent destruction H1.
-  constructor.
-  dependent destruction v.
-  dependent destruction v0.
   dependent destruction H0.
-  eapply CFilterFalse.
+
+  apply CFilterFalse.
   apply and_r_false.
+  assumption.
+  apply CFilterFalse.
+  apply and_r_false.
+  assumption.
+
+
+
 Admitted.
 
 
