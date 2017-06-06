@@ -448,19 +448,6 @@ Proof.
   econstructor.
   exact H.
   dependent induction v.
-  apply CFilterNil.
-  inversion H1.
-  inversion H0.
-  dependent destruction H0.
-  dependent destruction H0.
-
-  apply CFilterFalse.
-  apply and_r_false.
-  assumption.
-  apply CFilterFalse.
-  apply and_r_false.
-  assumption.
-
 
 
 Admitted.
@@ -478,3 +465,7 @@ Proof.
        assumption).
 
 Admitted.
+
+Extraction Language Haskell.
+Extraction Implicit compose [G].
+Recursive Extraction map_fusion.
