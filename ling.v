@@ -177,6 +177,7 @@ Proof.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
   - simpl.
+    rewrite IHg1; try reflexivity.
     admit.
   - simpl.
     rewrite IHg1; try reflexivity.
@@ -275,6 +276,26 @@ Proof.
   congruence.
 Qed.
 
+Lemma cfilter_total : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool) (v : val t) (vs vl : val (TList t)) (vb : val TBool),
+      Ev (HCons v R) e vb -> exists vl, CFilter R (vcons v vs) e vl.
+  intros.
+  dependent induction vs.
+  dependent destruction vb.
+  exists (vcons v vnil).
+  eapply CFilterTrue.
+  assumption.
+  apply CFilterNil.
+  exists vnil.
+  eapply CFilterFalse.
+  assumption.
+  apply CFilterNil.
+  edestruct IHvs2;
+  try reflexivity.
+  assumption.
+  eassumption.
+  eexists.
+Admitted.
+
 Theorem ev_total : forall G t (R : ev_ctx G) (e : exp G t),
     exists v, Ev R e v.
 Proof.
@@ -347,7 +368,10 @@ Proof.
     * dependent induction x.
       + exists vnil.
         constructor.
-      + admit.
+      + destruct (IHe1 (HCons x1 R)).
+        eapply cfilter_total.
+        assumption.
+        eassumption.
     * destruct H0.
         exists x0.
         eapply EvFilter.
@@ -432,6 +456,26 @@ Proof.
   apply EvAndFalse; auto.
 Qed.
 
+Lemma cfilter_fusion : forall t G (R : ev_ctx G) (e1 e2 : exp (t :: G) TBool) (v1 v2 v3 : val (TList t)),
+  CFilter R v1 e1 v2 -> CFilter R v2 e2 v3 -> CFilter R v1 (eand e2 e1) v3.
+  intros.
+  dependent induction H.
+  dependent destruction H0.
+  apply CFilterNil.
+  dependent destruction H1.
+  apply CFilterTrue.
+  apply EvAndTrue; assumption.
+  apply IHCFilter.
+  assumption.
+  apply CFilterFalse.
+  apply EvAndFalse; assumption.
+  apply IHCFilter.
+  assumption.
+  apply CFilterFalse.
+  apply and_r_false; assumption.
+  apply IHCFilter; assumption.
+Qed.
+
 Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
         Ev R e v -> Ev R (filter_fusion e) v.
 Proof.
@@ -445,13 +489,31 @@ Proof.
   simpl.
   dependent destruction H.
   dependent destruction H.
-  econstructor.
-  exact H.
-  dependent induction v.
+  eapply EvFilter.
+  eassumption.
+  eapply cfilter_fusion.
+  eassumption.
+  eassumption.
+Qed.
 
+Lemma compose_sound2 : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
+                              (v1 : val t1) (v2 : val t2) (v3 : val t3),
+      Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
+  Admitted.
 
+  
+
+Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
+                           (v1 : val (TList t1)) (v2 : val (TList t2)) (v3 : val (TList t3)),
+  CMap R v1 e1 v2 -> CMap R v2 e2 v3 -> CMap R v1 (compose e1 e2) v3.
+  intros.
+  dependent induction H.
+  dependent destruction H0.
+  apply CMapNil.
+  dependent destruction H1.
+  apply CMapCons.
+  eapply compose_sound2; eassumption.
 Admitted.
-
 
 Theorem map_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
         Ev R e v -> Ev R (map_fusion e) v.
@@ -464,8 +526,13 @@ Proof.
   try (unfold map_fusion in *;
        assumption).
 
-Admitted.
-
-Extraction Language Haskell.
-Extraction Implicit compose [G].
-Recursive Extraction map_fusion.
+  simpl.
+  dependent destruction H.
+  dependent destruction H.
+  eapply EvMap.
+  eassumption.
+  eapply cmap_fusion.
+  eassumption.
+  simpl_eq.
+  assumption.
+Qed.
