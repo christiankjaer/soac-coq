@@ -7,6 +7,7 @@ Definition env := list ty.
 
 (* Intrinsically typed expression syntax *)
 Inductive exp G : ty -> Type :=
+(* A variable is a member of the typing context *)
 | evar : forall t, member t G -> exp G t
 | etrue : exp G TBool
 | efalse : exp G TBool
