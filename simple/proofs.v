@@ -106,6 +106,4 @@ Definition build (A : Type) (g : forall B, (A -> B -> B) -> B -> B) : list A :=
 
 Definition build : forall A, (forall B, (A -> B -> B) -> B -> B) -> list A.
   
-  
-
 Theorem foldr_build T T' : forall g (k : T -> T' -> T') (z : T'), foldr k z (build g) = g k z.
