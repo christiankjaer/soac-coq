@@ -447,21 +447,7 @@ Proof.
   dependent destruction H.
   econstructor.
   exact H.
-  dependent induction v.
-  apply CFilterNil.
-  inversion H1.
-  inversion H0.
-  dependent destruction H0.
-  dependent destruction H0.
-
-  apply CFilterFalse.
-  apply and_r_false.
-  assumption.
-  apply CFilterFalse.
-  apply and_r_false.
-  assumption.
-
-
+  dependent induction H0.
 
 Admitted.
 
