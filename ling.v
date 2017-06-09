@@ -8,6 +8,8 @@ Load hlist.
 Load ling_syntax.
 Load ling_semantics.
 
+(* Some quick examples of expressions *)
+
 Example inc : exp nil (TList TNat) :=
   emap (esucc (evar HFirst)) (econs (econst 4) (econs (econst 5) enil)).
 
@@ -131,6 +133,7 @@ Definition filter_fusion t G (e : exp G t) : exp G t.
   trivial.
 Defined.
 
+
 Definition map_fusion t G (e : exp G t) : exp G t.
   refine (match e in exp _ t' return exp G t' -> exp G t' with
           | emap t2 t3 g em => (fun lt2 (em' : exp G lt2) =>
@@ -143,6 +146,28 @@ Definition map_fusion t G (e : exp G t) : exp G t.
   injection Heq. intros. subst. exact g.
   trivial.
 Defined.
+
+Definition map_fusion2 t G (e : exp G t) : exp G t.
+  refine (match e in exp _ t' return exp G t' -> exp G t' with
+          | emap t2 t3 g em => (fun lt2 (em' : exp G lt2) =>
+                                  match em' in exp _ lt2 return (TList t2 = lt2 -> _) with
+                                  | emap t3 t2' f eb => fun Heq _ =>
+                                                          emap (elet f (shift2Exp _ _)) eb
+                                  | _ => fun _ e => e
+                                  end) (TList t2) em _
+          |  _ => fun e => e
+          end e).
+  injection Heq. intros. subst. exact g.
+  trivial.
+Defined.
+
+Definition nest : exp nil (TList TNat) := (emap (esucc (evar HFirst)) (emap (esucc (esucc (evar HFirst))) [| econst 10; econst 20; econst 30 |])).
+
+Eval compute in map_fusion nest.
+Eval compute in map_fusion2 nest.
+Eval compute in expDenote nest HNil.
+Eval compute in expDenote (map_fusion nest) HNil.
+Eval compute in expDenote (map_fusion2 nest) HNil.
 
 Lemma map_id : forall G t (e : exp G t) s,
     expDenote (elet e (evar HFirst)) s = expDenote e s.
@@ -241,7 +266,6 @@ Qed.
 
 Ltac rewriter H :=
   erewrite H; try reflexivity; try eassumption; clear H.
-  
 
 (* CApp is deterministic *)
 Lemma capp_determ : forall t (v1 v2 v3 v4 : val (TList t)),
@@ -276,25 +300,40 @@ Proof.
   congruence.
 Qed.
 
-Lemma cfilter_total : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool) (v : val t) (vs vl : val (TList t)) (vb : val TBool),
-      Ev (HCons v R) e vb -> exists vl, CFilter R (vcons v vs) e vl.
-  intros.
+Lemma cmap_total : forall G t t' (R : ev_ctx G) (e : exp (t :: G) t') (vs : val (TList t)),
+      (forall v, exists v', Ev (HCons v R) e v') -> exists vl, CMap R vs e vl.
   dependent induction vs.
-  dependent destruction vb.
-  exists (vcons v vnil).
-  eapply CFilterTrue.
-  assumption.
-  apply CFilterNil.
+  intros.
   exists vnil.
-  eapply CFilterFalse.
-  assumption.
-  apply CFilterNil.
-  edestruct IHvs2;
-  try reflexivity.
-  assumption.
-  eassumption.
-  eexists.
-Admitted.
+  eapply CMapNil.
+  intros.
+  assert (exists vb, Ev (HCons vs1 R) e vb).
+  apply H.
+  destruct H0.
+  edestruct IHvs2; try eassumption; try reflexivity.
+  exists (vcons x x0).
+  apply CMapCons; assumption.
+Qed.
+
+Lemma cfilter_total : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool) (vs : val (TList t)),
+      (forall v, exists vb, Ev (HCons v R) e vb) -> exists vl, CFilter R vs e vl.
+  dependent induction vs.
+  intros.
+  exists vnil.
+  eapply CFilterNil.
+  intros.
+  assert (exists vb, Ev (HCons vs1 R) e vb).
+  apply H.
+  destruct H0.
+  dependent destruction x;
+  edestruct IHvs2; try eassumption; try reflexivity.
+  exists (vcons vs1 x).
+  apply CFilterTrue; assumption.
+  exists x.
+  apply CFilterFalse; assumption.
+Qed.
+
+Ltac exister v := exists v; econstructor; assumption.
 
 Theorem ev_total : forall G t (R : ev_ctx G) (e : exp G t),
     exists v, Ev R e v.
@@ -307,79 +346,51 @@ Proof.
   - (eexists; constructor).
   - destruct (IHe R).
     dependent destruction x.
-    exists (vconst (S n)).
-    constructor.
-    assumption.
+    exister (vconst (S n)).
   - destruct (IHe1 R).
     destruct (IHe2 R).
     dependent destruction x;
       dependent destruction x0.
-    exists vtrue.
-    constructor.
-    assumption.
-    assumption.
-    exists vfalse.
-    constructor.
-    assumption.
-    assumption.
-    exists vfalse.
-    apply EvAndFalse.
-    assumption.
-    exists vfalse.
-    apply EvAndFalse.
-    assumption.
+    exister vtrue.
+    exister vfalse.
+    exister vfalse.
+    exister vfalse.
   - (eexists; constructor).
   - destruct (IHe1 R).
     destruct (IHe2 R).
-    exists (vcons x x0).
-    constructor.
-    assumption.
-    assumption.
+    exister (vcons x x0).
   - destruct (IHe1 R).
     destruct (IHe2 (HCons x R)).
     exists x0.
-    eapply EvLet.
-    eassumption.
-    assumption.
+    eapply EvLet; eassumption.
   - destruct (IHe1 R).
     destruct (IHe2 R).
     assert (exists v, CApp x x0 v).
     apply capp_total with (v1 := x) (v2 := x0).
     destruct H1.
     exists x1.
-    eapply EvAppend.
-    eassumption.
-    eassumption.
-    assumption.
+    eapply EvAppend; eassumption.
   - destruct (IHe2 R).
     assert (exists v, CMap R x e1 v).
-    generalize dependent x.
-    * dependent induction x.
-      + exists vnil.
-        constructor.
-      + intros.
-        destruct (IHe1 (HCons x1 R)).
-        admit.
-    * destruct H0.
-      exists x0.
-      eapply EvMap.
-      eassumption.
-      eassumption.
+    apply cmap_total.
+    intros.
+    edestruct IHe1.
+    exists x0.
+    eassumption.
+    destruct H0.
+    exists x0.
+    econstructor; eassumption.
   - destruct (IHe2 R).
     assert (exists v, CFilter R x e1 v).
-    * dependent induction x.
-      + exists vnil.
-        constructor.
-      + destruct (IHe1 (HCons x1 R)).
-        eapply cfilter_total.
-        assumption.
-        eassumption.
-    * destruct H0.
-        exists x0.
-        eapply EvFilter.
-        eassumption.
-        eassumption.
-Admitted.
+    apply cfilter_total.
+    intros.
+    edestruct IHe1.
+    exists x0.
+    eassumption.
+    destruct H0.
+    exists x0.
+    econstructor; eassumption.
+Qed.
 
 Ltac ev_destructor :=
   match goal with
@@ -447,7 +458,6 @@ Proof. intros.
 
 Lemma and_r_false : forall G (R : ev_ctx G) (e1 e2 : exp G TBool),
     Ev R e2 vfalse -> Ev R (eand e1 e2) vfalse.
-
 Proof.
   intros.
   assert (exists v, Ev R e1 v).
@@ -501,9 +511,8 @@ Qed.
 Lemma compose_sound2 : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                               (v1 : val t1) (v2 : val t2) (v3 : val t3),
       Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
-  Admitted.
-
-  
+Admitted.
+ 
 Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                            (v1 : val (TList t1)) (v2 : val (TList t2)) (v3 : val (TList t3)),
   CMap R v1 e1 v2 -> CMap R v2 e2 v3 -> CMap R v1 (compose e1 e2) v3.
@@ -531,7 +540,6 @@ Proof.
   dependent destruction e2;
   try (unfold map_fusion in *;
        assumption).
-
   simpl.
   dependent destruction H.
   dependent destruction H.
