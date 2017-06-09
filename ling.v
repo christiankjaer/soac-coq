@@ -203,7 +203,7 @@ Proof.
     rewrite IHg2; try reflexivity.
   - simpl.
     rewrite IHg1; try reflexivity.
-    admit.
+    admit. (* let case *)
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
@@ -300,40 +300,32 @@ Proof.
   congruence.
 Qed.
 
+Ltac exister v := exists v; econstructor; eassumption.
+
 Lemma cmap_total : forall G t t' (R : ev_ctx G) (e : exp (t :: G) t') (vs : val (TList t)),
       (forall v, exists v', Ev (HCons v R) e v') -> exists vl, CMap R vs e vl.
-  dependent induction vs.
-  intros.
-  exists vnil.
-  eapply CMapNil.
-  intros.
-  assert (exists vb, Ev (HCons vs1 R) e vb).
-  apply H.
-  destruct H0.
-  edestruct IHvs2; try eassumption; try reflexivity.
-  exists (vcons x x0).
-  apply CMapCons; assumption.
+  dependent induction vs; intros.
+  - exister (@vnil t').
+  - assert (exists vb, Ev (HCons vs1 R) e vb).
+    apply H.
+    destruct H0.
+    edestruct IHvs2; try eassumption; try reflexivity.
+    exister (vcons x x0).
 Qed.
 
 Lemma cfilter_total : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool) (vs : val (TList t)),
-      (forall v, exists vb, Ev (HCons v R) e vb) -> exists vl, CFilter R vs e vl.
-  dependent induction vs.
-  intros.
-  exists vnil.
-  eapply CFilterNil.
-  intros.
-  assert (exists vb, Ev (HCons vs1 R) e vb).
-  apply H.
-  destruct H0.
-  dependent destruction x;
-  edestruct IHvs2; try eassumption; try reflexivity.
-  exists (vcons vs1 x).
-  apply CFilterTrue; assumption.
-  exists x.
-  apply CFilterFalse; assumption.
+    (forall v, exists vb, Ev (HCons v R) e vb) -> exists vl, CFilter R vs e vl.
+  dependent induction vs; intros.
+  - exister (@vnil t).
+  - assert (exists vb, Ev (HCons vs1 R) e vb).
+    apply H.
+    destruct H0.
+    dependent destruction x;
+      edestruct IHvs2; try eassumption; try reflexivity.
+    exister (vcons vs1 x).
+    exister x.
 Qed.
 
-Ltac exister v := exists v; econstructor; assumption.
 
 Theorem ev_total : forall G t (R : ev_ctx G) (e : exp G t),
     exists v, Ev R e v.
@@ -361,15 +353,13 @@ Proof.
     exister (vcons x x0).
   - destruct (IHe1 R).
     destruct (IHe2 (HCons x R)).
-    exists x0.
-    eapply EvLet; eassumption.
+    exister x0.
   - destruct (IHe1 R).
     destruct (IHe2 R).
     assert (exists v, CApp x x0 v).
     apply capp_total with (v1 := x) (v2 := x0).
     destruct H1.
-    exists x1.
-    eapply EvAppend; eassumption.
+    exister x1.
   - destruct (IHe2 R).
     assert (exists v, CMap R x e1 v).
     apply cmap_total.
@@ -378,8 +368,7 @@ Proof.
     exists x0.
     eassumption.
     destruct H0.
-    exists x0.
-    econstructor; eassumption.
+    exister x0.
   - destruct (IHe2 R).
     assert (exists v, CFilter R x e1 v).
     apply cfilter_total.
@@ -388,8 +377,7 @@ Proof.
     exists x0.
     eassumption.
     destruct H0.
-    exists x0.
-    econstructor; eassumption.
+    exister x0.
 Qed.
 
 Ltac ev_destructor :=
@@ -510,7 +498,7 @@ Qed.
 
 Lemma compose_sound2 : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                               (v1 : val t1) (v2 : val t2) (v3 : val t3),
-      Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
+    Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
 Admitted.
  
 Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
