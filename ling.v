@@ -211,7 +211,7 @@ Proof.
   - admit. (* filter case *)
 Admitted.
   
-Theorem map_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (map_fusion e) s.
+Theorem map_fusion_sound t G (e : exp G t) s : expDenote e s = expDenote (map_fusion e) s.
 Proof.
   (* Eliminate all the trivial cases *)
   dependent destruction e; 
@@ -228,7 +228,7 @@ Proof.
     reflexivity.
 Qed.
 
-Theorem filter_fusion_sound t (e : exp nil t) s : expDenote e s = expDenote (filter_fusion e) s.
+Theorem filter_fusion_sound t G (e : exp G t) s : expDenote e s = expDenote (filter_fusion e) s.
   Proof.
     (* Eliminate all the trivial cases *)
     dependent destruction e; 
@@ -491,16 +491,33 @@ Proof.
   dependent destruction H.
   eapply EvFilter.
   eassumption.
-  eapply cfilter_fusion.
-  eassumption.
-  eassumption.
+  eapply cfilter_fusion; eassumption.
 Qed.
 
 Lemma compose_sound2 : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                               (v1 : val t1) (v2 : val t2) (v3 : val t3),
     Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
+Proof.
+  intros.
+  generalize dependent H.
+  dependent induction H0;
+    intros;
+    unfold compose.
+  dependent destruction m.
+  dependent destruction G.
+  simpl.
+  assumption.
+  simpl.
+  assumption.
+  simpl.
+  unfold idSub.
+  admit.
+  simpl. constructor.
+  simpl. constructor.
+  simpl. constructor.
+  simpl. constructor.
 Admitted.
- 
+
 Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                            (v1 : val (TList t1)) (v2 : val (TList t2)) (v3 : val (TList t3)),
   CMap R v1 e1 v2 -> CMap R v2 e2 v3 -> CMap R v1 (compose e1 e2) v3.
