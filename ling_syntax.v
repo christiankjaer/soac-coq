@@ -3,6 +3,10 @@ Inductive ty : Type :=
 | TNat : ty
 | TList : ty -> ty.
 
+Definition eq_ty_dec (x y : ty) : {x = y} + {x <> y}.
+  decide equality.
+Defined.
+
 Definition env := list ty.
 
 (* Intrinsically typed expression syntax *)

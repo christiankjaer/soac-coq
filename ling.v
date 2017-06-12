@@ -1,6 +1,8 @@
 Require Import Bool Arith List.
 Require Import Coq.Program.Equality.
 Require Import Program.
+Require Import Coq.Logic.Eqdep.
+Require Import Coq.Logic.Eqdep_dec.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
@@ -80,8 +82,13 @@ Definition shiftExp G t t' : exp G t -> exp (t' :: G) t :=
   renameExp (fun _ v => HNext v).
 
 Definition shift2Exp G t1 t2 t3 : exp (t2 :: G) t3 -> exp (t2 :: t1 :: G) t3.
-  refine (renameExp (fun _ v => _)).
-  inversion v; subst; repeat constructor; auto.
+  refine (renameExp (fun t' v => (match v in (member _ l) return (l = t2 :: G -> member t' (t2 :: t1 :: G)) with
+                                | HFirst _ => fun Heq => _
+                                | HNext _ _ v' => fun Heq => @HNext _ _ _ _
+                                                                    (@HNext _ _ _ _ _)
+                                  end) eq_refl));
+    injection Heq; intros; subst; repeat constructor.
+  assumption.
 Defined.
 
 Program Definition
@@ -202,7 +209,7 @@ Proof.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
   - simpl.
-    rewrite IHg1; try reflexivity.
+    
     admit. (* let case *)
   - simpl.
     rewrite IHg1; try reflexivity.
@@ -304,6 +311,7 @@ Ltac exister v := exists v; econstructor; eassumption.
 
 Lemma cmap_total : forall G t t' (R : ev_ctx G) (e : exp (t :: G) t') (vs : val (TList t)),
       (forall v, exists v', Ev (HCons v R) e v') -> exists vl, CMap R vs e vl.
+Proof.
   dependent induction vs; intros.
   - exister (@vnil t').
   - assert (exists vb, Ev (HCons vs1 R) e vb).
@@ -315,6 +323,7 @@ Qed.
 
 Lemma cfilter_total : forall G t (R : ev_ctx G) (e : exp (t :: G) TBool) (vs : val (TList t)),
     (forall v, exists vb, Ev (HCons v R) e vb) -> exists vl, CFilter R vs e vl.
+Proof.
   dependent induction vs; intros.
   - exister (@vnil t).
   - assert (exists vb, Ev (HCons vs1 R) e vb).
@@ -501,8 +510,7 @@ Proof.
   intros.
   generalize dependent H.
   dependent induction H0;
-    intros;
-    unfold compose.
+    intros.
   dependent destruction m.
   dependent destruction G.
   simpl.
@@ -510,12 +518,13 @@ Proof.
   simpl.
   assumption.
   simpl.
-  unfold idSub.
   admit.
   simpl. constructor.
   simpl. constructor.
   simpl. constructor.
   simpl. constructor.
+  unfold compose.
+  simpl_eq.
 Admitted.
 
 Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
