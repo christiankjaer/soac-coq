@@ -127,6 +127,11 @@ Definition tlSub {G G' t} (s : Sub (t :: G) G') : Sub G G' :=
 Definition hdSub {G G' t} (s : Sub (t :: G) G') : exp G' t :=
   s t HFirst.
 
+Ltac Rewrites E :=
+  (intros; simpl; try rewrite E;
+   repeat (match goal with | [H : context[_ = _] |- _] => rewrite H end);
+   auto).
+
 Ltac ExtVar :=
   match goal with
     [ |- ?X = ?Y ] =>
@@ -145,24 +150,7 @@ Proof. intros.
        Qed.
 
 Lemma ActIdSub : forall G t (e : exp G t), subExp idSub e = e.
-Proof. induction e;
-       simpl;
-       try reflexivity;
-       try (rewrite IHe; reflexivity);
-       try (rewrite IHe1; rewrite IHe2; reflexivity).
-       rewrite IHe1.
-       rewrite LiftIdSub.
-       rewrite IHe2.
-       reflexivity.
-       rewrite IHe2.
-       rewrite LiftIdSub.
-       rewrite IHe1.
-       reflexivity.
-       rewrite IHe2.
-       rewrite LiftIdSub.
-       rewrite IHe1.
-       reflexivity.
-Qed.
+Proof. induction e; Rewrites LiftIdSub. Qed.
 
 Eval compute in compose (econst 10) (elet (econst 10) (evar (HFirst))).
 
@@ -248,7 +236,8 @@ Proof.
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
-  - simpl.
+  - unfold compose.
+
     rewrite IHg1;
     admit. (* let case *)
   - simpl.
