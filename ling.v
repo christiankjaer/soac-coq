@@ -216,7 +216,7 @@ Eval compute in expDenote nest HNil.
 Eval compute in expDenote (map_fusion nest) HNil.
 Eval compute in expDenote (map_fusion2 nest) HNil.
 
-Lemma map_id : forall G t (e : exp G t) s,
+Lemma let_id : forall G t (e : exp G t) s,
     expDenote (elet e (evar HFirst)) s = expDenote e s.
 Proof.
   intros. simpl. reflexivity.
