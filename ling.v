@@ -115,6 +115,10 @@ Fixpoint subExp G G' t (s : Sub G G') (e : exp G t) :=
   | efilter _ e1 e2 => efilter (subExp (subShift s) e1) (subExp s e2)
   end.
 
+Check subExp.
+Check renameExp.
+Check Sub.
+
 Definition compose t1 t2 t3 G (f : exp (t1 :: G) t2) (g : exp (t2 :: G) t3) : exp (t1 :: G) t3 :=
   subExp {| f |} (shift2Exp _ g).
 
@@ -503,29 +507,62 @@ Proof.
   eapply cfilter_fusion; eassumption.
 Qed.
 
+Lemma subst_sound : forall t t' G (R : ev_ctx G) (e : exp (t' :: G) t) (f : exp G t')
+                           (v : val t) (v' : val t'),
+    Ev (HCons v' R) e v -> Ev R f v' -> Ev R (subExp {| f |} e) v.
+Proof.
+  intros.
+  dependent induction H; simpl. try constructor.
+  dependent destruction m. auto. simpl. constructor.
+  constructor.
+  constructor.
+  constructor.
+  constructor.
+  constructor.
+  eapply IHEv1; try reflexivity; assumption.
+  eapply IHEv2; try reflexivity; assumption.
+  econstructor.
+  eapply IHEv1; try reflexivity; assumption.
+  eapply IHEv2; try reflexivity; assumption.
+  assumption.
+  constructor.
+  eapply IHEv; try reflexivity; assumption.
+  apply EvAndTrue.
+  eapply IHEv1; try reflexivity; assumption.
+  eapply IHEv2; try reflexivity; assumption.
+  apply EvAndFalse.
+  eapply IHEv; try reflexivity; assumption.
+  econstructor.
+  eapply IHEv1; try reflexivity; assumption.
+Admitted.
+
+  
+
+Lemma shift2_sound : forall t1 t2 t3 G (R : ev_ctx G) (e : exp (t2 :: G) t3)
+                            (v1 : val t1) (v2 : val t2) (v3 : val t3),
+    Ev (HCons v2 R) e v3 -> Ev (HCons v2 (HCons v1 R)) (shift2Exp t1 e) v3.
+Proof.
+  intros.
+  dependent induction H.
+  dependent destruction m.
+  simpl.
+  constructor.
+  dependent destruction m.
+  simpl.
+Admitted.
+
 Lemma compose_sound2 : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                               (v1 : val t1) (v2 : val t2) (v3 : val t3),
     Ev (HCons v1 R) e1 v2 -> Ev (HCons v2 R) e2 v3 -> Ev (HCons v1 R) (compose e1 e2) v3.
 Proof.
   intros.
-  generalize dependent H.
-  dependent induction H0;
-    intros.
-  dependent destruction m.
-  dependent destruction G.
-  simpl.
-  assumption.
-  simpl.
-  assumption.
-  simpl.
-  admit.
-  simpl. constructor.
-  simpl. constructor.
-  simpl. constructor.
-  simpl. constructor.
   unfold compose.
-  simpl_eq.
-Admitted.
+  eapply subst_sound.
+  apply shift2_sound.
+  eassumption.
+  assumption.
+Qed.
+
 
 Lemma cmap_fusion : forall t1 t2 t3 G (R : ev_ctx G) (e1 : exp (t1 :: G) t2) (e2 : exp (t2 :: G) t3)
                            (v1 : val (TList t1)) (v2 : val (TList t2)) (v3 : val (TList t3)),
