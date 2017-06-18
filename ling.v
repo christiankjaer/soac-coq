@@ -82,11 +82,14 @@ Definition shiftExp G t t' : exp G t -> exp (t' :: G) t :=
   renameExp (fun _ v => HNext v).
 
 Definition shift2Exp G t1 t2 t3 : exp (t2 :: G) t3 -> exp (t2 :: t1 :: G) t3.
-  refine (renameExp (fun t' v => (match v in (member _ l) return (l = t2 :: G -> member t' (t2 :: t1 :: G)) with
-                                | HFirst _ => fun Heq => _
-                                | HNext _ _ v' => fun Heq => @HNext _ _ _ _
-                                                                    (@HNext _ _ _ _ _)
-                                  end) eq_refl));
+  refine (renameExp
+            (fun t' v =>
+               (match v in (member _ l)
+                      return (l = t2 :: G -> member t' (t2 :: t1 :: G)) with
+                | HFirst _ => fun Heq => _
+                | HNext _ _ v' => fun Heq => @HNext _ _ _ _
+                                                    (@HNext _ _ _ _ _)
+                end) eq_refl));
     injection Heq; intros; subst; repeat constructor.
   assumption.
 Defined.
@@ -127,6 +130,31 @@ Definition tlSub {G G' t} (s : Sub (t :: G) G') : Sub G G' :=
 
 Definition hdSub {G G' t} (s : Sub (t :: G) G') : exp G' t :=
   s t HFirst.
+
+Ltac Rewrites E :=
+  (intros; simpl; try rewrite E;
+   repeat (match goal with | [H : context[_ = _] |- _] => rewrite H end);
+   auto).
+
+Ltac ExtVar :=
+  match goal with
+    [ |- ?X = ?Y ] =>
+    (apply (@functional_extensionality_dep _ _ X Y) ;
+     let t := fresh "t" in
+     intro t;
+     apply functional_extensionality;
+     let v := fresh "v" in
+     intro v;
+     dependent destruction v; auto)
+  end.
+
+Lemma LiftIdSub : forall G t, subShift (@idSub G) = @idSub (t::G).
+Proof. intros.
+       ExtVar.
+       Qed.
+
+Lemma ActIdSub : forall G t (e : exp G t), subExp idSub e = e.
+Proof. induction e; Rewrites LiftIdSub. Qed.
 
 Eval compute in compose (econst 10) (elet (econst 10) (evar (HFirst))).
 
@@ -180,7 +208,7 @@ Eval compute in expDenote nest HNil.
 Eval compute in expDenote (map_fusion nest) HNil.
 Eval compute in expDenote (map_fusion2 nest) HNil.
 
-Lemma map_id : forall G t (e : exp G t) s,
+Lemma let_id : forall G t (e : exp G t) s,
     expDenote (elet e (evar HFirst)) s = expDenote e s.
 Proof.
   intros. simpl. reflexivity.
@@ -212,8 +240,9 @@ Proof.
   - simpl.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
-  - simpl.
-    
+  - unfold compose.
+
+    rewrite IHg1;
     admit. (* let case *)
   - simpl.
     rewrite IHg1; try reflexivity.
