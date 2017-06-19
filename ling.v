@@ -241,8 +241,6 @@ Proof.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
   - unfold compose.
-
-    rewrite IHg1;
     admit. (* let case *)
   - simpl.
     rewrite IHg1; try reflexivity.
