@@ -237,7 +237,7 @@ Proof.
     rewrite IHg1; try reflexivity.
     rewrite IHg2; try reflexivity.
   - unfold compose.
-
+    simpl.
     rewrite IHg1;
     admit. (* let case *)
   - simpl.
@@ -514,6 +514,26 @@ Lemma cfilter_fusion : forall t G (R : ev_ctx G) (e1 e2 : exp (t :: G) TBool) (v
   apply IHCFilter; assumption.
 Qed.
 
+Check EvConst.
+Check EvNil.
+Check TNat.
+
+Example ex1 : Ev HNil (emap (esucc (evar HFirst)) (econs (econst 4) enil)) (vcons (vconst 5) vnil).
+eapply EvMap.
+eapply EvCons.
+eapply EvConst.
+eapply EvNil.
+eapply CMapCons.
+eapply EvSucc.
+eapply EvVar.
+eapply CMapNil.
+Defined.
+
+Print ex1.
+
+Check (EvMap (EvCons (EvConst HNil 4) (EvNil HNil TNat))
+             (CMapCons (EvSucc (EvVar (HCons (vconst 4) HNil) HFirst)) (CMapNil HNil _))).
+
 Theorem filter_fusion_sound2 : forall t G (R : ev_ctx G) (e : exp G t) (v : val t),
         Ev R e v -> Ev R (filter_fusion e) v.
 Proof.
@@ -588,3 +608,5 @@ Proof.
   simpl_eq.
   assumption.
 Qed.
+
+Check EvMap.
